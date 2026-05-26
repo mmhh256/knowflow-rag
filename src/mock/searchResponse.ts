@@ -13,8 +13,10 @@ export const mockSearchResponse: SearchResponse = {
       id: "library-borrow-guide",
       title: "图书馆借阅与续借办理说明",
       type: "official",
+      site: "校图书馆官网",
       excerpt:
         "读者可通过馆藏系统查询图书状态，持校园卡或读者码到服务台、自助借还机办理借阅与续借。",
+      highlights: ["馆藏状态", "校园卡", "自助借还机"],
       url: null,
       score: 0.92,
     },
@@ -22,8 +24,10 @@ export const mockSearchResponse: SearchResponse = {
       id: "library-peak-time",
       title: "图书馆借书高峰期要不要早点去",
       type: "student_experience",
+      site: "校园生活问答社区",
       excerpt:
         "考试周和开学初借阅人数较多，热门书籍可能需要提前查询馆藏并尽早到馆。",
+      highlights: ["考试周", "热门书籍", "提前查询"],
       url: null,
       score: 0.78,
     },

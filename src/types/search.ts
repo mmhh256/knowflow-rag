@@ -11,7 +11,9 @@ export type SearchSource = {
   id: string;
   title: string;
   type: SourceType;
+  site: string;
   excerpt: string;
+  highlights: string[];
   url: string | null;
   score?: number;
 };
