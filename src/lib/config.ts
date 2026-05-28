@@ -33,11 +33,13 @@ type AppConfig = {
   };
 };
 
+// 空字符串不算有效配置，统一转成 undefined，后续判断会更稳定。
 function optionalEnv(name: string): string | undefined {
   const value = process.env[name];
   return value && value.trim().length > 0 ? value : undefined;
 }
 
+// 数字型环境变量统一在这里解析，写错时使用 fallback，避免 NaN 进入业务逻辑。
 function numberEnv(name: string, fallback: number): number {
   const value = optionalEnv(name);
   if (!value) {
@@ -48,6 +50,7 @@ function numberEnv(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+// 所有环境变量集中从 appConfig 读取，避免在组件或接口里到处写 process.env。
 export const appConfig: AppConfig = {
   llm: {
     provider: optionalEnv("LLM_PROVIDER") ?? "openai-compatible",

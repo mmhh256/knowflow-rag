@@ -1,11 +1,13 @@
 @import "tailwindcss";
 
 :root {
+  /* 全局颜色变量，Tailwind 的 @theme 会继续复用它们。 */
   --background: #ffffff;
   --foreground: #171717;
 }
 
 @theme inline {
+  /* 把 CSS 变量注册成 Tailwind 主题变量，方便在 className 中使用。 */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
@@ -14,6 +16,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    /* 跟随系统深色模式切换基础前景色和背景色。 */
     --background: #0a0a0a;
     --foreground: #ededed;
   }

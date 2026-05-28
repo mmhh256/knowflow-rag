@@ -1,6 +1,7 @@
 import type { Conversation } from "@/components/chat/types";
 
 type ConversationListProps = {
+  // P1/P2 还是模拟会话数据，后续接数据库后可以替换成真实会话列表。
   conversations: Conversation[];
   activeConversationId: string;
   onSelectConversation: (conversationId: string) => void;
@@ -28,6 +29,7 @@ export function ConversationList({
 
       <div className="mt-4 space-y-2">
         {conversations.map((conversation) => {
+          // 当前会话用高亮样式，其他会话保持普通样式。
           const isActive = conversation.id === activeConversationId;
 
           return (

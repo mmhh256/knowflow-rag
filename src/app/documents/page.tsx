@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/layout/AppShell";
 
+// P2 仍然只展示静态文档数据，不做真实上传、解析或索引。
 const documents = [
   {
     name: "产品需求说明.pdf",
@@ -69,6 +70,7 @@ export default function DocumentsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {documents.map((document) => (
+                  // 文档名在模拟数据中唯一，暂时可作为 key；接数据库后应改用 documentId。
                   <tr key={document.name} className="text-slate-700">
                     <td className="whitespace-nowrap px-5 py-4 font-medium text-slate-950">
                       {document.name}

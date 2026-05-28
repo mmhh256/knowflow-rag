@@ -2,7 +2,7 @@
 
 面向文档与多轮对话的智能知识库问答系统。
 
-当前完成阶段：P1 前端页面壳子与聊天 UI。
+当前完成阶段：P2 假后端接口与前后端链路。
 
 ## 当前范围
 
@@ -19,7 +19,8 @@
 - 聊天页面 `/chat`
 - 知识库页面 `/documents`
 - 设置页面 `/settings`
-- 本地状态模拟聊天交互
+- 聊天页面调用 `/api/chat` 假后端接口
+- 后端返回模拟回答和空引用来源
 
 当前尚未接入数据库、人工智能、登录、真实文档上传、检索增强生成、流式输出、流程编排或容器部署。
 
@@ -49,6 +50,7 @@ npm run lint
 ```txt
 src/app              Next.js 页面与后续接口路由
 src/app/chat         聊天页面
+src/app/api/chat     假聊天接口
 src/app/documents    知识库页面
 src/app/settings     设置页面
 src/components       后续界面组件目录
@@ -78,11 +80,11 @@ copy .env.example .env.local
 
 注意：接口密钥、数据库连接串、令牌密钥等敏感信息只能放在服务端环境变量中，不要写入前端组件，也不要添加公开前缀。
 
-## P1 验收
+## P2 验收
 
 - `npm run dev` 可以启动项目。
 - `/`、`/chat`、`/documents`、`/settings` 可以正常打开。
 - Tailwind CSS 样式生效。
-- `/chat` 输入问题后可以追加用户消息和模拟助手回复。
+- `/chat` 输入问题后会请求 `/api/chat`，并展示后端返回的模拟助手回复。
 - 空输入不会发送。
 - `/documents` 和 `/settings` 只展示静态壳子，不执行真实保存或上传。

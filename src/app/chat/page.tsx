@@ -3,40 +3,22 @@
 import { useState } from "react";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatWindow } from "@/components/chat/ChatWindow";
-import type {
-  ChatMessage,
-  SourcePreview,
-} from "@/components/chat/types";
 import { AppShell } from "@/components/layout/AppShell";
+import { request } from "@/lib/request";
+import type { ChatMessage, ChatRequest, ChatResponse } from "@/lib/types/chat";
 
-const mockSources: SourcePreview[] = [
-  {
-    id: "source-1",
-    title: "产品需求说明.pdf",
-    excerpt:
-      "后续阶段会在这里展示检索命中的片段、页码、分块序号和相似度分数。",
-    score: "0.91",
-  },
-  {
-    id: "source-2",
-    title: "团队手册.md",
-    excerpt:
-      "P1 阶段这里只是静态占位，不读取文件，也不执行真实检索。",
-    score: "0.84",
-  },
-];
-
+// 页面首次进入时展示一条欢迎消息，避免聊天区域完全空白。
 const initialMessages: ChatMessage[] = [
   {
     id: "assistant-welcome",
     role: "assistant",
     content:
-      "你好，我是 P1 阶段的模拟助手。你可以输入一个问题，我会用前端本地状态生成一条模拟回复。",
+      "你好，我是 P2 阶段的模拟助手。你可以输入一个问题，我会通过后端假接口返回一条模拟回复。",
     createdAt: "09:00",
-    sources: mockSources,
   },
 ];
 
+// 统一生成中文时间，保证用户消息和助手消息的显示格式一致。
 function createTimestamp() {
   return new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
@@ -44,16 +26,22 @@ function createTimestamp() {
   }).format(new Date());
 }
 
+// 用时间戳和随机片段生成前端临时 id，满足 React 列表渲染 key 的要求。
 function createMessageId(role: ChatMessage["role"]) {
   return `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export default function ChatPage() {
+  // messages 是聊天页的核心状态，用户消息和助手消息都保存在这里。
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  // input 是受控输入框的值，ChatInput 只负责展示和触发变更。
   const [input, setInput] = useState("");
+  // isLoading 用来控制按钮禁用和“正在生成”占位，防止重复提交。
   const [isLoading, setIsLoading] = useState(false);
+  // error 保存接口失败后的提示文案，交给 ChatWindow 展示。
+  const [error, setError] = useState("");
 
-  function handleSend() {
+  async function handleSend() {
     const question = input.trim();
     if (!question || isLoading) {
       return;
@@ -69,29 +57,43 @@ export default function ChatPage() {
     setMessages((currentMessages) => [...currentMessages, userMessage]);
     setInput("");
     setIsLoading(true);
+    setError("");
 
-    window.setTimeout(() => {
+    try {
+      // 前端只关心 ChatRequest/ChatResponse，底层 fetch 细节交给 request 封装。
+      const requestBody: ChatRequest = { question };
+      const data = await request<ChatResponse>("/api/chat", {
+        method: "POST",
+        body: requestBody,
+      });
+      // 后端 answer 回来后，再组装成 assistant 消息追加到消息列表。
       const assistantMessage: ChatMessage = {
         id: createMessageId("assistant"),
         role: "assistant",
-        content: `这是针对“${question}”的本地模拟回复。P2 阶段这里会改为请求假后端接口，但 P1 只保留在前端状态中。`,
+        content: data.answer,
         createdAt: createTimestamp(),
-        sources: mockSources,
+        sources: data.sources,
       };
 
       setMessages((currentMessages) => [
         ...currentMessages,
         assistantMessage,
       ]);
+    } catch (requestError) {
+      // request.ts 会把非 2xx 响应转成 Error，这里只负责把错误展示出来。
+      const message =
+        requestError instanceof Error ? requestError.message : "聊天请求失败";
+      setError(message);
+    } finally {
       setIsLoading(false);
-    }, 600);
+    }
   }
 
   return (
     <AppShell>
       <div className="flex h-screen min-h-[720px] flex-col overflow-hidden">
         <div className="flex min-w-0 flex-1 flex-col">
-          <ChatWindow messages={messages} isLoading={isLoading} />
+          <ChatWindow messages={messages} isLoading={isLoading} error={error} />
           <ChatInput
             value={input}
             isLoading={isLoading}

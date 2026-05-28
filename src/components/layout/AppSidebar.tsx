@@ -10,6 +10,7 @@ const navItems = [
   { href: "/settings", label: "模型设置" },
 ];
 
+// P2 仍然使用静态会话，后续保存会话后再从后端读取。
 const conversations = [
   { title: "产品问答", time: "刚刚" },
   { title: "文档理解", time: "昨天" },
@@ -17,6 +18,7 @@ const conversations = [
 ];
 
 export function AppSidebar() {
+  // usePathname 用来判断当前路由，从而给菜单项添加选中样式。
   const pathname = usePathname();
 
   return (
@@ -28,6 +30,7 @@ export function AppSidebar() {
 
       <nav className="mt-8 space-y-1">
         {navItems.map((item) => {
+          // 首页需要精确匹配，其他页面可以用 startsWith 支持子路由。
           const isActive =
             item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
 

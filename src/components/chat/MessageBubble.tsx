@@ -5,6 +5,7 @@ type MessageBubbleProps = {
 };
 
 export function MessageBubble({ message }: MessageBubbleProps) {
+  // role 决定消息是用户气泡还是助手回复，也决定布局方向。
   const isUser = message.role === "user";
 
   return (
@@ -27,6 +28,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
         <div className="whitespace-pre-wrap">{message.content}</div>
 
+        {/* 引用来源跟随助手消息展示；P2 sources 为空，后续 RAG 阶段会填充。 */}
         {!isUser && message.sources?.length ? (
           <div className="mt-4 rounded-lg bg-slate-100 px-4 py-3">
             <div className="text-xs font-semibold text-slate-500">
@@ -40,12 +42,12 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 >
                   <div>
                     <div className="font-medium text-slate-700">
-                      {source.title}
+                      {source.fileName}
                     </div>
-                    <div className="mt-1 line-clamp-2">{source.excerpt}</div>
+                    <div className="mt-1 line-clamp-2">{source.content}</div>
                   </div>
                   <div className="shrink-0 text-slate-400">
-                    {source.score} 匹配
+                    {Math.round(source.score * 100)}% 匹配
                   </div>
                 </div>
               ))}
@@ -57,7 +59,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           className={`mt-3 text-xs ${
             isUser ? "text-blue-100" : "text-slate-400"
           }`}
-        >
+      >
+          {/* 时间和角色放在气泡底部，方便调试消息生成顺序。 */}
           {isUser ? "用户" : "助手"} · {message.createdAt}
         </div>
       </article>
