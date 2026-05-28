@@ -33,6 +33,15 @@ type AppConfig = {
   };
 };
 
+export type ServerLlmConfig = {
+  llmProvider: string;
+  llmApiKey: string;
+  llmBaseUrl: string;
+  llmModel: string;
+};
+
+const supportedLlmProviders = ["openai-compatible", "deepseek"];
+
 // 空字符串不算有效配置，统一转成 undefined，后续判断会更稳定。
 function optionalEnv(name: string): string | undefined {
   const value = process.env[name];
@@ -85,3 +94,42 @@ export const appConfig: AppConfig = {
     jwtRefreshSecret: optionalEnv("JWT_REFRESH_SECRET"),
   },
 };
+
+// P3 新增：服务端模型配置集中出口。
+// 这些值只能在 Route Handler、Provider 等后端代码里使用，不能传给浏览器。
+// 尤其是 LLM_API_KEY，如果写进前端组件，用户可以在浏览器源码或 Network 中看到密钥。
+export const serverConfig: ServerLlmConfig = {
+  llmProvider: appConfig.llm.provider,
+  llmApiKey: appConfig.llm.apiKey ?? "",
+  llmBaseUrl: appConfig.llm.baseUrl ?? "",
+  llmModel: appConfig.llm.model ?? "",
+};
+
+// 在真正调用外部模型前做校验，让接口返回“缺了什么”，而不是报一个难懂的 fetch 错误。
+export function getValidatedServerLlmConfig(): ServerLlmConfig {
+  const missingFields: string[] = [];
+
+  if (!serverConfig.llmApiKey) {
+    missingFields.push("LLM_API_KEY");
+  }
+
+  if (!serverConfig.llmBaseUrl) {
+    missingFields.push("LLM_BASE_URL");
+  }
+
+  if (!serverConfig.llmModel) {
+    missingFields.push("LLM_MODEL");
+  }
+
+  if (missingFields.length > 0) {
+    throw new Error(
+      `模型配置缺失：${missingFields.join("、")}。请在项目根目录创建 .env.local，填写真实模型配置后重启开发服务器。`,
+    );
+  }
+
+  if (!supportedLlmProviders.includes(serverConfig.llmProvider)) {
+    throw new Error(`暂不支持的模型供应商：${serverConfig.llmProvider}`);
+  }
+
+  return serverConfig;
+}

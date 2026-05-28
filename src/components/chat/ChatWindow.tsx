@@ -12,14 +12,14 @@ type ChatWindowProps = {
 
 export function ChatWindow({ messages, isLoading, error }: ChatWindowProps) {
   return (
-    <section className="flex min-h-0 flex-1 flex-col bg-slate-50">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto max-w-5xl space-y-6">
           {/* 有消息时渲染消息列表，没有消息时展示空状态。 */}
           {messages.length === 0 ? (
             <EmptyState
               title="开始一次知识库问答"
-              description="在底部输入问题。P2 会请求后端假接口返回一条模拟助手回复。"
+              description="在底部输入问题。P3 会通过后端调用外部模型返回普通 AI 回复。"
             />
           ) : (
             messages.map((message) => (

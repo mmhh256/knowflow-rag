@@ -4,12 +4,12 @@ import { AppShell } from "@/components/layout/AppShell";
 const modelCards = [
   {
     title: "大语言模型配置",
-    status: "P2 阶段暂不连接真实模型",
+    status: "P3 阶段从 .env.local 读取模型配置",
     fields: ["接口地址占位", "模型名称占位", "密钥占位"],
   },
   {
     title: "向量模型配置",
-    status: "P2 阶段暂不连接真实模型",
+    status: "P3 阶段暂不连接向量模型",
     fields: ["接口地址占位", "模型名称占位", "密钥占位"],
   },
 ];
@@ -24,7 +24,7 @@ export default function SettingsPage() {
             模型配置
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            这里是后续模型配置页面的静态占位。P2 不保存密钥、不测试连接，也不调用任何外部服务。
+            这里是后续模型配置页面的静态占位。P3 的真实模型调用发生在后端，页面不保存密钥、不测试连接。
           </p>
         </div>
 

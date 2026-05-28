@@ -13,7 +13,7 @@ const initialMessages: ChatMessage[] = [
     id: "assistant-welcome",
     role: "assistant",
     content:
-      "你好，我是 P2 阶段的模拟助手。你可以输入一个问题，我会通过后端假接口返回一条模拟回复。",
+      "你好，我是 P3 阶段的 AI 助手。你可以输入一个问题，我会通过后端接口调用外部模型返回回答。",
     createdAt: "09:00",
   },
 ];
@@ -91,16 +91,14 @@ export default function ChatPage() {
 
   return (
     <AppShell>
-      <div className="flex h-screen min-h-[720px] flex-col overflow-hidden">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <ChatWindow messages={messages} isLoading={isLoading} error={error} />
-          <ChatInput
-            value={input}
-            isLoading={isLoading}
-            onChange={setInput}
-            onSend={handleSend}
-          />
-        </div>
+      <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+        <ChatWindow messages={messages} isLoading={isLoading} error={error} />
+        <ChatInput
+          value={input}
+          isLoading={isLoading}
+          onChange={setInput}
+          onSend={handleSend}
+        />
       </div>
     </AppShell>
   );

@@ -48,7 +48,7 @@ export function ChatInput({
         </button>
       </div>
       <p className="mx-auto mt-2 max-w-5xl text-xs text-slate-500">
-        P2 会请求后端假接口获取模拟回答，暂不接入真实模型。
+        P3 会请求后端接口调用外部模型，API Key 只在服务端使用。
       </p>
     </div>
   );

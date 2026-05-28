@@ -22,7 +22,7 @@ export function AppSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-4 py-5 lg:flex lg:flex-col">
+    <aside className="hidden h-full w-64 shrink-0 overflow-y-auto border-r border-slate-200 bg-white px-4 py-5 lg:flex lg:flex-col">
       <Link href="/" className="block rounded-lg px-3 py-2">
         <div className="text-sm font-semibold text-slate-950">知流知识库</div>
         <div className="mt-1 text-xs text-slate-500">智能知识库问答</div>
