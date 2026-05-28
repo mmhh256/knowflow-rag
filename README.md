@@ -1,12 +1,12 @@
-# Next.js Agentic RAG Knowledge Base
+# Next.js 智能知识库问答系统
 
-面向文档与多轮对话的 Agentic RAG 智能知识库问答系统。
+面向文档与多轮对话的智能知识库问答系统。
 
-当前完成阶段：P0 项目初始化与基础约束。
+当前完成阶段：P1 前端页面壳子与聊天 UI。
 
 ## 当前范围
 
-本阶段只完成工程基础：
+当前已完成前端基础页面：
 
 - Next.js App Router
 - React
@@ -15,8 +15,13 @@
 - 基础目录结构
 - `.env.example`
 - `src/lib/config.ts`
+- 首页 `/`
+- 聊天页面 `/chat`
+- 知识库页面 `/documents`
+- 设置页面 `/settings`
+- 本地状态模拟聊天交互
 
-本阶段尚未接入数据库、AI、登录、文档上传、RAG、SSE、LangGraph 或 Docker。
+当前尚未接入数据库、人工智能、登录、真实文档上传、检索增强生成、流式输出、流程编排或容器部署。
 
 ## 本地运行
 
@@ -42,20 +47,25 @@ npm run lint
 ## 目录说明
 
 ```txt
-src/app              Next.js App Router 页面与后续 API 路由
-src/components       后续 UI 组件目录
-src/components/chat  后续聊天 UI 组件目录
-src/components/documents  后续知识库文档 UI 组件目录
-src/components/settings   后续模型设置 UI 组件目录
+src/app              Next.js 页面与后续接口路由
+src/app/chat         聊天页面
+src/app/documents    知识库页面
+src/app/settings     设置页面
+src/components       后续界面组件目录
+src/components/chat  聊天界面组件
+src/components/common 通用空状态和加载组件
+src/components/layout 应用侧边栏和页面外壳
+src/components/documents  后续知识库文档界面组件目录
+src/components/settings   后续模型设置界面组件目录
 src/lib              服务端与共享工具目录
 src/lib/config.ts    环境变量统一读取入口
-src/lib/rag          后续 RAG 逻辑目录
+src/lib/rag          后续检索增强生成逻辑目录
 src/lib/llm          后续大模型适配目录
 src/lib/documents    后续文档解析处理目录
 src/lib/vector       后续向量库封装目录
 src/store            后续前端状态管理目录
 uploads              后续上传文件目录
-data/lancedb         后续 LanceDB 数据目录
+data/lancedb         后续向量数据目录
 ```
 
 ## 环境变量
@@ -66,12 +76,13 @@ data/lancedb         后续 LanceDB 数据目录
 copy .env.example .env.local
 ```
 
-注意：API Key、数据库连接串、JWT Secret 等敏感信息只能放在服务端环境变量中，不要写入前端组件，也不要添加 `NEXT_PUBLIC_` 前缀。
+注意：接口密钥、数据库连接串、令牌密钥等敏感信息只能放在服务端环境变量中，不要写入前端组件，也不要添加公开前缀。
 
-## P0 验收
+## P1 验收
 
 - `npm run dev` 可以启动项目。
-- 首页可以正常打开。
+- `/`、`/chat`、`/documents`、`/settings` 可以正常打开。
 - Tailwind CSS 样式生效。
-- `.env.example` 存在。
-- 基础目录结构清晰。
+- `/chat` 输入问题后可以追加用户消息和模拟助手回复。
+- 空输入不会发送。
+- `/documents` 和 `/settings` 只展示静态壳子，不执行真实保存或上传。
