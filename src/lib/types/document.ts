@@ -17,8 +17,18 @@ export type KnowledgeDocument = {
   chunkCount: number;
   preview?: string;
   parseError?: string;
+  indexError?: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type DocumentIndexResponse = {
+  document: {
+    id: string;
+    fileName: string;
+    status: "indexed";
+    chunkCount: number;
+  };
 };
 
 export type DocumentListResponse = {

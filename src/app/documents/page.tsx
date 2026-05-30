@@ -11,6 +11,7 @@ import {
 import { request } from "@/lib/request";
 import type {
   DocumentDetailResponse,
+  DocumentIndexResponse,
   DocumentListResponse,
   DocumentUploadResponse,
   KnowledgeDocument,
@@ -24,8 +25,12 @@ function formatDate(date: string) {
 }
 
 function getStatusClass(status: KnowledgeDocument["status"]) {
-  if (status === "parsed" || status === "indexed") {
+  if (status === "indexed") {
     return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  }
+
+  if (status === "parsed") {
+    return "bg-sky-50 text-sky-700 ring-sky-200";
   }
 
   if (status === "parse_failed" || status === "index_failed") {
@@ -39,6 +44,18 @@ function getStatusClass(status: KnowledgeDocument["status"]) {
   return "bg-slate-100 text-slate-700 ring-slate-200";
 }
 
+function canIndex(status: KnowledgeDocument["status"]) {
+  return status === "parsed" || status === "indexed" || status === "index_failed";
+}
+
+function getIndexButtonText(document: KnowledgeDocument, isIndexing: boolean) {
+  if (isIndexing) {
+    return "向量化中";
+  }
+
+  return document.status === "indexed" ? "重新索引" : "向量化";
+}
+
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -47,6 +64,7 @@ export default function DocumentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const [isIndexingId, setIsIndexingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -67,7 +85,7 @@ export default function DocumentsPage() {
   }
 
   useEffect(() => {
-    // 页面打开时从数据库加载真实文档列表，刷新页面后数据也不会丢。
+    // 页面打开时从数据库加载真实文档列表，刷新后文档状态和 chunkCount 也会保留。
     const timer = window.setTimeout(() => {
       void loadDocuments();
     }, 0);
@@ -95,7 +113,7 @@ export default function DocumentsPage() {
     setIsUploading(true);
 
     try {
-      // 文件上传必须用 FormData。request 会识别 FormData，并让浏览器自动设置 multipart 请求头。
+      // 文件上传仍然只负责“保存 + 解析”，P6 的向量化通过单独按钮触发。
       const data = await request<DocumentUploadResponse>(
         "/api/documents/upload",
         {
@@ -111,7 +129,7 @@ export default function DocumentsPage() {
       setSelectedFile(null);
       setMessage(
         data.document.status === "parsed"
-          ? "上传并解析成功。"
+          ? "上传并解析成功，下一步可以点击“向量化”。"
           : "文件已上传，但解析失败，请查看详情。",
       );
     } catch (requestError) {
@@ -136,6 +154,66 @@ export default function DocumentsPage() {
       setError(
         requestError instanceof Error ? requestError.message : "读取文档详情失败",
       );
+    }
+  }
+
+  async function handleIndex(document: KnowledgeDocument) {
+    setError("");
+    setMessage("");
+    setIsIndexingId(document.id);
+
+    setDocuments((currentDocuments) =>
+      currentDocuments.map((item) =>
+        item.id === document.id ? { ...item, status: "indexing" } : item,
+      ),
+    );
+
+    try {
+      // “向量化 / 重新索引”会调用后端读取 parsedText，切 chunk，生成 embedding，再写入 LanceDB。
+      const data = await request<DocumentIndexResponse>(
+        `/api/documents/${document.id}/index`,
+        {
+          method: "POST",
+        },
+      );
+
+      setDocuments((currentDocuments) =>
+        currentDocuments.map((item) =>
+          item.id === document.id
+            ? {
+                ...item,
+                status: data.document.status,
+                chunkCount: data.document.chunkCount,
+                indexError: undefined,
+              }
+            : item,
+        ),
+      );
+      setSelectedDocument((currentDocument) =>
+        currentDocument?.id === document.id
+          ? {
+              ...currentDocument,
+              status: data.document.status,
+              chunkCount: data.document.chunkCount,
+              indexError: undefined,
+            }
+          : currentDocument,
+      );
+      setMessage("索引成功，可以用于后续知识库问答。");
+    } catch (requestError) {
+      const errorMessage =
+        requestError instanceof Error ? requestError.message : "文档向量化失败";
+
+      setError(errorMessage);
+      setDocuments((currentDocuments) =>
+        currentDocuments.map((item) =>
+          item.id === document.id
+            ? { ...item, status: "index_failed", indexError: errorMessage }
+            : item,
+        ),
+      );
+    } finally {
+      setIsIndexingId(null);
     }
   }
 
@@ -174,8 +252,8 @@ export default function DocumentsPage() {
               文档管理
             </h1>
             <p className="max-w-2xl text-sm leading-6 text-slate-600">
-              P5 阶段实现真实文档上传和文本解析。这里先把 PDF、TXT、Markdown
-              解析成纯文本，为下一阶段分块和向量化做准备。
+              P6 阶段在 P5 的解析结果上继续：把 parsedText 切成 chunk，生成
+              embedding，并写入 LanceDB。当前仍不做 RAG 问答。
             </p>
           </div>
 
@@ -240,7 +318,7 @@ export default function DocumentsPage() {
                   文档列表
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  展示数据库中的真实文档记录和解析状态。
+                  chunk 数量表示文档被切成了多少个可检索片段。
                 </p>
               </div>
               <button
@@ -267,59 +345,75 @@ export default function DocumentsPage() {
                       <th className="px-5 py-3">类型</th>
                       <th className="px-5 py-3">大小</th>
                       <th className="px-5 py-3">状态</th>
-                      <th className="px-5 py-3">分块数</th>
+                      <th className="px-5 py-3">chunk 数</th>
                       <th className="px-5 py-3">上传时间</th>
                       <th className="px-5 py-3">操作</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {documents.map((document) => (
-                      <tr key={document.id} className="text-slate-700">
-                        <td className="max-w-xs px-5 py-4 font-medium text-slate-950">
-                          <span className="line-clamp-2">{document.fileName}</span>
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-4 uppercase">
-                          {document.fileType}
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-4">
-                          {formatFileSize(document.fileSize)}
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-4">
-                          <span
-                            className={`rounded-md px-2 py-1 text-xs font-medium ring-1 ${getStatusClass(
-                              document.status,
-                            )}`}
-                          >
-                            {documentStatusLabels[document.status]}
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-4">
-                          {document.chunkCount}
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-4">
-                          {formatDate(document.createdAt)}
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-4">
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handlePreview(document.id)}
-                              className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                    {documents.map((document) => {
+                      const isIndexing = isIndexingId === document.id;
+
+                      return (
+                        <tr key={document.id} className="text-slate-700">
+                          <td className="max-w-xs px-5 py-4 font-medium text-slate-950">
+                            <span className="line-clamp-2">
+                              {document.fileName}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-4 uppercase">
+                            {document.fileType}
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-4">
+                            {formatFileSize(document.fileSize)}
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-4">
+                            <span
+                              className={`rounded-md px-2 py-1 text-xs font-medium ring-1 ${getStatusClass(
+                                document.status,
+                              )}`}
                             >
-                              查看详情
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isDeletingId === document.id}
-                              onClick={() => handleDelete(document.id)}
-                              className="rounded-md border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {isDeletingId === document.id ? "删除中" : "删除"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                              {documentStatusLabels[document.status]}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-4">
+                            {document.chunkCount}
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-4">
+                            {formatDate(document.createdAt)}
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-4">
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handlePreview(document.id)}
+                                className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                              >
+                                查看详情
+                              </button>
+                              {canIndex(document.status) ? (
+                                <button
+                                  type="button"
+                                  disabled={isIndexing}
+                                  onClick={() => handleIndex(document)}
+                                  className="rounded-md border border-sky-200 px-2 py-1 text-xs text-sky-700 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {getIndexButtonText(document, isIndexing)}
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                disabled={isDeletingId === document.id}
+                                onClick={() => handleDelete(document.id)}
+                                className="rounded-md border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {isDeletingId === document.id ? "删除中" : "删除"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -366,9 +460,9 @@ export default function DocumentsPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-500">上传时间</dt>
+                  <dt className="text-slate-500">chunk 数</dt>
                   <dd className="mt-1 font-medium text-slate-900">
-                    {formatDate(selectedDocument.createdAt)}
+                    {selectedDocument.chunkCount}
                   </dd>
                 </div>
               </dl>
@@ -376,6 +470,12 @@ export default function DocumentsPage() {
               {selectedDocument.parseError ? (
                 <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                   {selectedDocument.parseError}
+                </div>
+              ) : null}
+
+              {selectedDocument.indexError ? (
+                <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {selectedDocument.indexError}
                 </div>
               ) : null}
 

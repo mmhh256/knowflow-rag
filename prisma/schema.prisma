@@ -66,6 +66,7 @@ model Document {
   status     String   @default("uploaded")
   parsedText String?  @db.LongText
   parseError String?  @db.Text
+  indexError String?  @db.Text
   chunkCount Int      @default(0)
   user       User     @relation(fields: [userId], references: [id])
   createdAt  DateTime @default(now())

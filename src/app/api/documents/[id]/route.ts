@@ -7,6 +7,7 @@ import {
   toKnowledgeDocument,
 } from "@/lib/documents/document-types";
 import { prisma } from "@/lib/db";
+import { deleteDocumentVectors } from "@/lib/vector/document-vector-store";
 
 type RouteContext = {
   params: Promise<{
@@ -53,7 +54,9 @@ export async function DELETE(_req: Request, context: RouteContext) {
     where: { id: document.id },
   });
 
-  // 删除文档时要同时清理数据库记录和本地文件。P6 之后还需要同步删除向量库里的 chunk 数据。
+  // 删除文档时要同时清理数据库记录、本地文件和 LanceDB 向量，避免后续检索到已经删除的资料。
+  await deleteDocumentVectors(document.id);
+
   try {
     await unlink(path.join(process.cwd(), "uploads", path.basename(document.filePath)));
   } catch {

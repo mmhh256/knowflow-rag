@@ -14,10 +14,10 @@ export type SupportedDocumentType = "pdf" | "txt" | "md";
 export const documentStatusLabels: Record<DocumentStatus, string> = {
   uploaded: "已上传",
   parsing: "解析中",
-  parsed: "已解析",
+  parsed: "已解析，待向量化",
   parse_failed: "解析失败",
   indexing: "向量化中",
-  indexed: "已入库",
+  indexed: "已入库，可用于问答",
   index_failed: "向量化失败",
 };
 
@@ -75,6 +75,7 @@ export function toKnowledgeDocument(document: {
   chunkCount: number;
   parsedText?: string | null;
   parseError?: string | null;
+  indexError?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): KnowledgeDocument {
@@ -87,6 +88,7 @@ export function toKnowledgeDocument(document: {
     chunkCount: document.chunkCount,
     preview: createTextPreview(document.parsedText),
     parseError: document.parseError ?? undefined,
+    indexError: document.indexError ?? undefined,
     createdAt: document.createdAt.toISOString(),
     updatedAt: document.updatedAt.toISOString(),
   };

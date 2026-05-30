@@ -28,6 +28,10 @@
 /uploads/*
 !/uploads/.gitkeep
 
+# local LanceDB vector files
+/data/lancedb/*
+!/data/lancedb/.gitkeep
+
 # debug
 npm-debug.log*
 yarn-debug.log*

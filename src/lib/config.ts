@@ -24,7 +24,7 @@ type AppConfig = {
     uploadDir: string;
   };
   vector: {
-    lanceDbPath: string;
+    lancedbPath: string;
   };
   security: {
     configEncryptionSecret?: string;
@@ -40,15 +40,22 @@ export type ServerLlmConfig = {
   llmModel: string;
 };
 
-const supportedLlmProviders = ["openai-compatible", "deepseek"];
+export type ServerEmbeddingConfig = {
+  embeddingProvider: string;
+  embeddingApiKey: string;
+  embeddingBaseUrl: string;
+  embeddingModel: string;
+  lancedbPath: string;
+};
 
-// 空字符串不算有效配置，统一转成 undefined，后续判断会更稳定。
+const supportedLlmProviders = ["openai-compatible", "deepseek"];
+const supportedEmbeddingProviders = ["openai-compatible"];
+
 function optionalEnv(name: string): string | undefined {
   const value = process.env[name];
   return value && value.trim().length > 0 ? value : undefined;
 }
 
-// 数字型环境变量统一在这里解析，写错时使用 fallback，避免 NaN 进入业务逻辑。
 function numberEnv(name: string, fallback: number): number {
   const value = optionalEnv(name);
   if (!value) {
@@ -60,6 +67,7 @@ function numberEnv(name: string, fallback: number): number {
 }
 
 // 所有环境变量集中从 appConfig 读取，避免在组件或接口里到处写 process.env。
+// API Key 只能在后端使用，不能返回给浏览器，否则用户可以在源码或 Network 中看到密钥。
 export const appConfig: AppConfig = {
   llm: {
     provider: optionalEnv("LLM_PROVIDER") ?? "openai-compatible",
@@ -86,7 +94,7 @@ export const appConfig: AppConfig = {
     uploadDir: optionalEnv("UPLOAD_DIR") ?? "./uploads",
   },
   vector: {
-    lanceDbPath: optionalEnv("LANCEDB_PATH") ?? "./data/lancedb",
+    lancedbPath: optionalEnv("LANCEDB_PATH") ?? "./data/lancedb",
   },
   security: {
     configEncryptionSecret: optionalEnv("CONFIG_ENCRYPTION_SECRET"),
@@ -95,9 +103,6 @@ export const appConfig: AppConfig = {
   },
 };
 
-// P3 新增：服务端模型配置集中出口。
-// 这些值只能在 Route Handler、Provider 等后端代码里使用，不能传给浏览器。
-// 尤其是 LLM_API_KEY，如果写进前端组件，用户可以在浏览器源码或 Network 中看到密钥。
 export const serverConfig: ServerLlmConfig = {
   llmProvider: appConfig.llm.provider,
   llmApiKey: appConfig.llm.apiKey ?? "",
@@ -105,7 +110,14 @@ export const serverConfig: ServerLlmConfig = {
   llmModel: appConfig.llm.model ?? "",
 };
 
-// 在真正调用外部模型前做校验，让接口返回“缺了什么”，而不是报一个难懂的 fetch 错误。
+export const serverEmbeddingConfig: ServerEmbeddingConfig = {
+  embeddingProvider: appConfig.embedding.provider,
+  embeddingApiKey: appConfig.embedding.apiKey ?? "",
+  embeddingBaseUrl: appConfig.embedding.baseUrl ?? "",
+  embeddingModel: appConfig.embedding.model ?? "",
+  lancedbPath: appConfig.vector.lancedbPath,
+};
+
 export function getValidatedServerLlmConfig(): ServerLlmConfig {
   const missingFields: string[] = [];
 
@@ -123,7 +135,7 @@ export function getValidatedServerLlmConfig(): ServerLlmConfig {
 
   if (missingFields.length > 0) {
     throw new Error(
-      `模型配置缺失：${missingFields.join("、")}。请在项目根目录创建 .env.local，填写真实模型配置后重启开发服务器。`,
+      `模型配置缺失：${missingFields.join("、")}。请在 .env.local 中填写真实模型配置后重启 npm run dev。`,
     );
   }
 
@@ -132,4 +144,38 @@ export function getValidatedServerLlmConfig(): ServerLlmConfig {
   }
 
   return serverConfig;
+}
+
+export function getValidatedServerEmbeddingConfig(): ServerEmbeddingConfig {
+  const missingFields: string[] = [];
+
+  if (!serverEmbeddingConfig.embeddingApiKey) {
+    missingFields.push("EMBEDDING_API_KEY");
+  }
+
+  if (!serverEmbeddingConfig.embeddingBaseUrl) {
+    missingFields.push("EMBEDDING_BASE_URL");
+  }
+
+  if (!serverEmbeddingConfig.embeddingModel) {
+    missingFields.push("EMBEDDING_MODEL");
+  }
+
+  if (missingFields.length > 0) {
+    throw new Error(
+      `Embedding 配置缺失：${missingFields.join("、")}。请在 .env.local 中填写 Embedding 配置后重启 npm run dev。`,
+    );
+  }
+
+  if (
+    !supportedEmbeddingProviders.includes(
+      serverEmbeddingConfig.embeddingProvider,
+    )
+  ) {
+    throw new Error(
+      `暂不支持的 Embedding 供应商：${serverEmbeddingConfig.embeddingProvider}`,
+    );
+  }
+
+  return serverEmbeddingConfig;
 }
