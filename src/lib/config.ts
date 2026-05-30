@@ -83,7 +83,7 @@ export const appConfig: AppConfig = {
   },
   rag: {
     topK: numberEnv("RAG_TOP_K", 5),
-    scoreThreshold: numberEnv("RAG_SCORE_THRESHOLD", 0.72),
+    scoreThreshold: numberEnv("RAG_SCORE_THRESHOLD", 0.35),
     chunkSize: numberEnv("RAG_CHUNK_SIZE", 800),
     chunkOverlap: numberEnv("RAG_CHUNK_OVERLAP", 100),
   },

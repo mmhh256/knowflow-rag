@@ -1,1 +1,6 @@
-export type { ChatMessage, Conversation, SourceChunk } from "@/lib/types/chat";
+export type {
+  ChatMessage,
+  Conversation,
+  RetrievalStatus,
+  SourceChunk,
+} from "@/lib/types/chat";

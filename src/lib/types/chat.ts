@@ -2,8 +2,9 @@ export type SourceChunk = {
   id: string;
   documentId: string;
   fileName: string;
+  fileType?: string;
   content: string;
-  // score 表示检索命中分数，P2 先不用，后续展示引用来源时会用到。
+  // score 表示检索命中分数。P7 中由 LanceDB 的 distance 转换而来，越接近 1 越相关。
   score: number;
   page?: number;
   chunkIndex?: number;
