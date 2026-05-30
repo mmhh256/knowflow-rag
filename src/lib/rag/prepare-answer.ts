@@ -1,20 +1,15 @@
+import { appConfig } from "@/lib/config";
+import { getRecentConversationMessages } from "@/lib/chat/history";
 import type { ChatProviderMessage } from "@/lib/llm/chat-provider";
+import { buildFallbackMessages } from "@/lib/rag/build-fallback-prompt";
 import { buildRagMessages } from "@/lib/rag/build-prompt";
 import { retrieveRelevantChunks } from "@/lib/rag/retrieve";
 import type { AnswerMode, RetrievalStatus, SourceChunk } from "@/lib/types/chat";
 
-const FALLBACK_SYSTEM_PROMPT =
-  "你是一个专业、清晰、耐心的 AI 助手。当前知识库没有找到足够相关的资料，请基于你的通用知识回答，并提醒用户该回答未使用知识库来源。";
-
-function buildFallbackMessages(question: string): ChatProviderMessage[] {
-  return [
-    { role: "system", content: FALLBACK_SYSTEM_PROMPT },
-    { role: "user", content: question },
-  ];
-}
-
 export async function prepareRagPriorityAnswer(params: {
   question: string;
+  conversationId?: string;
+  userId: string;
 }): Promise<{
   messages: ChatProviderMessage[];
   answerMode: AnswerMode;
@@ -22,8 +17,17 @@ export async function prepareRagPriorityAnswer(params: {
   fallbackReason?: string;
   sources: SourceChunk[];
 }> {
-  // 把“检索 + prompt 组装”提前准备好，
-  // 让普通接口和流式接口都能复用同一套 RAG 决策逻辑。
+  // P9 选择“先读取历史，再保存当前 user 消息”的方案。
+  // 这样 historyMessages 只包含当前问题之前的上下文，最后再把当前 question 放到 prompt 末尾，
+  // 可以避免“当前问题在历史里出现一次、在当前问题里又出现一次”的重复注入。
+  const historyMessages = params.conversationId
+    ? await getRecentConversationMessages({
+        conversationId: params.conversationId,
+        userId: params.userId,
+        limit: appConfig.conversation.historyLimit,
+      })
+    : [];
+
   const retrieval = await retrieveRelevantChunks({ question: params.question });
 
   if (retrieval.status === "hit") {
@@ -31,6 +35,7 @@ export async function prepareRagPriorityAnswer(params: {
       messages: buildRagMessages({
         question: params.question,
         sources: retrieval.sources,
+        historyMessages,
       }),
       answerMode: "rag",
       retrievalStatus: "hit",
@@ -39,7 +44,11 @@ export async function prepareRagPriorityAnswer(params: {
   }
 
   return {
-    messages: buildFallbackMessages(params.question),
+    messages: buildFallbackMessages({
+      question: params.question,
+      historyMessages,
+      fallbackReason: retrieval.fallbackReason,
+    }),
     answerMode: "fallback",
     retrievalStatus: retrieval.status,
     fallbackReason: retrieval.fallbackReason,

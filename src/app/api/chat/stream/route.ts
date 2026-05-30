@@ -39,8 +39,7 @@ async function getOrCreateConversation(
 }
 
 function encodeSseEvent(event: string, data: unknown) {
-  // SSE 格式固定为 "event: xxx\ndata: yyy\n\n"。
-  // 空行是事件结束标记，浏览器才能正确分割每一条事件。
+  // SSE 事件格式固定为 event + data + 空行，浏览器前端会按空行切分每条事件。
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
@@ -67,20 +66,8 @@ export async function POST(req: Request) {
     return jsonError("会话不存在", 404);
   }
 
-  // 保存顺序：先保存 user 消息，再生成 assistant 回复。
-  // 这样即使模型生成失败，数据库也能保留用户的问题，方便排查。
-  await prisma.message.create({
-    data: {
-      conversationId: conversation.id,
-      role: "user",
-      content: question,
-    },
-  });
-
   let clientAborted = false;
 
-  // ReadableStream 是浏览器/Node 统一的流式接口，
-  // 我们用它把 token 逐段写给前端。
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
@@ -89,10 +76,22 @@ export async function POST(req: Request) {
       };
 
       try {
-        const prepared = await prepareRagPriorityAnswer({ question });
+        // 流式接口和普通接口复用同一套 prepare 逻辑。
+        // prepare 会在当前 user 消息保存前读取历史，避免当前问题重复进入 prompt。
+        const prepared = await prepareRagPriorityAnswer({
+          question,
+          conversationId: conversation.id,
+          userId: MOCK_USER_ID,
+        });
 
-        // meta 必须先发：前端要先知道本次是 RAG 还是 fallback，
-        // 以及 sources / retrievalStatus 等信息，才能正确渲染占位消息。
+        await prisma.message.create({
+          data: {
+            conversationId: conversation.id,
+            role: "user",
+            content: question,
+          },
+        });
+
         sendEvent("meta", {
           conversationId: conversation.id,
           answerMode: prepared.answerMode,
@@ -109,9 +108,6 @@ export async function POST(req: Request) {
 
         let answer = "";
 
-        // AI 回答本身就是逐步生成的，所以非常适合用流式输出提前展示内容。
-        // token 是模型流式输出的最小文本片段。
-        // for await...of 可以逐段读取 AsyncIterable。
         for await (const token of chatProvider.stream(prepared.messages)) {
           if (clientAborted) {
             break;
@@ -122,8 +118,8 @@ export async function POST(req: Request) {
         }
 
         if (clientAborted) {
-          // 浏览器中断连接时，后端不一定还能保存完整答案，
-          // P8 第一版先允许前端保留已生成内容。
+          // P8/P9 第一版停止生成时不保存半截 assistant 消息。
+          // 前端会保留已显示内容；刷新后以数据库中已完整保存的历史为准。
           return;
         }
 
@@ -161,7 +157,7 @@ export async function POST(req: Request) {
       }
     },
     cancel() {
-      // 前端调用 AbortController.abort() 会触发 cancel。
+      // 前端 AbortController.abort() 会触发 cancel，用于停止继续读取模型流。
       clientAborted = true;
     },
   });

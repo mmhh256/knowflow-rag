@@ -17,6 +17,9 @@ type AppConfig = {
     chunkSize: number;
     chunkOverlap: number;
   };
+  conversation: {
+    historyLimit: number;
+  };
   database: {
     url?: string;
   };
@@ -86,6 +89,10 @@ export const appConfig: AppConfig = {
     scoreThreshold: numberEnv("RAG_SCORE_THRESHOLD", 0.35),
     chunkSize: numberEnv("RAG_CHUNK_SIZE", 800),
     chunkOverlap: numberEnv("RAG_CHUNK_OVERLAP", 100),
+  },
+  conversation: {
+    // 多轮对话只读取最近几条消息。历史太多会让 prompt 变长、成本变高，也更容易把旧话题带进当前问题。
+    historyLimit: numberEnv("CONVERSATION_HISTORY_LIMIT", 8),
   },
   database: {
     url: optionalEnv("DATABASE_URL"),

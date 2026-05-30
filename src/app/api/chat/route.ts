@@ -5,7 +5,8 @@ import type {
 } from "@/lib/types/chat";
 import { ensureMockUser, MOCK_USER_ID } from "@/lib/auth/mock-user";
 import { prisma } from "@/lib/db";
-import { answerQuestionWithRagPriority } from "@/lib/rag/answer-question";
+import { createOpenAICompatibleChatProvider } from "@/lib/llm/openai-compatible";
+import { prepareRagPriorityAnswer } from "@/lib/rag/prepare-answer";
 
 function jsonError(message: string, status: number) {
   const body: ChatErrorResponse = { error: message };
@@ -56,8 +57,16 @@ export async function POST(req: Request) {
       return jsonError("会话不存在", 404);
     }
 
-    // 保存顺序：先保存 user 消息，再生成 assistant 回复。
-    // 这样即使模型生成失败，数据库也能保留用户的问题，方便排查。
+    // P9 的关键顺序：
+    // 1. 先用 conversationId 读取“当前问题之前”的历史消息并准备 prompt。
+    // 2. 再保存当前 user 消息。
+    // 这样当前问题只会作为 prompt 最后一条 user 消息出现一次，不会被历史消息重复带进去。
+    const prepared = await prepareRagPriorityAnswer({
+      question,
+      conversationId: conversation.id,
+      userId: MOCK_USER_ID,
+    });
+
     await prisma.message.create({
       data: {
         conversationId: conversation.id,
@@ -66,31 +75,28 @@ export async function POST(req: Request) {
       },
     });
 
-    const result = await answerQuestionWithRagPriority({
-      question,
-      conversationId: conversation.id,
-    });
+    const chatProvider = createOpenAICompatibleChatProvider();
+    const answer = await chatProvider.generate(prepared.messages);
 
     const response: ChatResponse = {
       conversationId: conversation.id,
-      answer: result.answer,
-      sources: result.sources,
-      answerMode: result.answerMode,
-      retrievalStatus: result.retrievalStatus,
-      fallbackReason: result.fallbackReason,
+      answer,
+      sources: prepared.sources,
+      answerMode: prepared.answerMode,
+      retrievalStatus: prepared.retrievalStatus,
+      fallbackReason: prepared.fallbackReason,
     };
 
     await prisma.message.create({
       data: {
         conversationId: conversation.id,
         role: "assistant",
-        content: result.answer,
-        // assistant 消息保存 sources，刷新历史会话后仍然能看到引用来源。
-        sources: result.sources,
-        answerMode: result.answerMode,
-        retrievalStatus: result.retrievalStatus,
-        // fallback 也保存 retrievalStatus / fallbackReason，用户能知道为什么没用知识库。
-        fallbackReason: result.fallbackReason,
+        content: answer,
+        // assistant 消息保存 sources 和检索状态，刷新历史会话后仍然能看到回答依据。
+        sources: prepared.sources,
+        answerMode: prepared.answerMode,
+        retrievalStatus: prepared.retrievalStatus,
+        fallbackReason: prepared.fallbackReason,
       },
     });
 
@@ -101,7 +107,7 @@ export async function POST(req: Request) {
 
     return Response.json(response);
   } catch (error) {
-    // 检索异常已经在 RAG 层转为 fallback；这里出现错误通常是外部 LLM 生成失败或数据库异常。
+    // 检索失败会在 RAG 层转为 fallback；这里通常代表数据库或外部 LLM 生成失败。
     console.error("Chat route failed:", error);
     const message = error instanceof Error ? error.message : "聊天接口处理失败";
     return jsonError(message, 500);

@@ -47,8 +47,8 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
               {children}
             </blockquote>
           ),
-          code: ({ inline, children }) =>
-            inline ? (
+          code: ({ className, children }) =>
+            !className ? (
               <code className="rounded bg-slate-100 px-1 py-0.5 text-xs text-slate-800">
                 {children}
               </code>

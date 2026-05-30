@@ -5,6 +5,7 @@ import type { AnswerMode, RetrievalStatus, SourceChunk } from "@/lib/types/chat"
 export async function answerQuestionWithRagPriority(params: {
   question: string;
   conversationId?: string;
+  userId: string;
 }): Promise<{
   answer: string;
   answerMode: AnswerMode;
@@ -12,13 +13,13 @@ export async function answerQuestionWithRagPriority(params: {
   fallbackReason?: string;
   sources: SourceChunk[];
 }> {
-  // 先准备好 RAG 的决策结果和 prompt，复用同一套检索逻辑。
+  // 这个函数保留给普通一次性回答场景使用。P9 的历史上下文已经在 prepareRagPriorityAnswer 中统一拼好。
   const prepared = await prepareRagPriorityAnswer({
     question: params.question,
+    conversationId: params.conversationId,
+    userId: params.userId,
   });
   const chatProvider = createOpenAICompatibleChatProvider();
-  // 检索失败可以 fallback，因为用户仍然可以得到普通模型回答；
-  // 但如果模型生成失败，就没有可返回的回答了，应由 /api/chat 返回真正错误。
   const answer = await chatProvider.generate(prepared.messages);
 
   return {

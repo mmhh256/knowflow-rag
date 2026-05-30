@@ -141,16 +141,23 @@ export default function ChatPage() {
   }, [loadConversations]);
 
   async function handleSelectConversation(conversationId: string) {
+    // conversationId 是多轮上下文的边界。切换会话前先停止当前流式生成，
+    // 避免 A 会话的 token 继续写进 B 会话的消息列表。
+    abortControllerRef.current?.abort();
     setActiveConversationId(conversationId);
     setStreamStatus("idle");
     setStreamError("");
+    streamingMessageIdRef.current = null;
     await loadMessages(conversationId);
   }
 
   async function handleNewConversation() {
+    // 新建会话时也要清理旧的临时流式状态，不让旧会话上下文影响新会话。
+    abortControllerRef.current?.abort();
     setError("");
     setStreamStatus("idle");
     setStreamError("");
+    streamingMessageIdRef.current = null;
 
     try {
       const data = await request<{ conversation: Conversation }>(
