@@ -54,7 +54,8 @@ model Message {
 }
 
 /// Document 是文档元信息表。
-/// P4 只先建表，为 P5 文档上传和解析保存文件信息做准备。
+/// P5 会把上传文件保存到本地 uploads 目录，同时把解析出的纯文本保存到 parsedText。
+/// 后续 P6 会读取 parsedText 做文本分块和 embedding，本阶段只解析文本，不做向量化。
 model Document {
   id         String   @id @default(cuid())
   userId     String
@@ -63,6 +64,8 @@ model Document {
   fileSize   Int?
   filePath   String
   status     String   @default("uploaded")
+  parsedText String?  @db.LongText
+  parseError String?  @db.Text
   chunkCount Int      @default(0)
   user       User     @relation(fields: [userId], references: [id])
   createdAt  DateTime @default(now())

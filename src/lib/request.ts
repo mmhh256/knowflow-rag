@@ -1,5 +1,5 @@
 export type RequestOptions = Omit<RequestInit, "body"> & {
-  // 组件传普通对象即可，request 内部负责转成 JSON 字符串。
+  // 普通 JSON 请求传对象；文件上传请求传 FormData。request 内部会判断该怎么处理。
   body?: unknown;
 };
 
@@ -19,21 +19,31 @@ async function readErrorMessage(response: Response) {
   }
 }
 
-// 普通 JSON 接口的统一入口。组件只描述“请求什么”，不用重复写 fetch 细节。
+// 普通接口的统一入口。组件只描述“请求什么”，不用重复写 fetch 细节。
 export async function request<T>(
   url: string,
   options: RequestOptions = {},
 ): Promise<T> {
   const { body, headers, method = "GET", ...restOptions } = options;
+  const isFormData = body instanceof FormData;
+  const finalHeaders = new Headers(headers);
+
+  if (!isFormData && !finalHeaders.has("Content-Type")) {
+    finalHeaders.set("Content-Type", "application/json");
+  }
 
   const response = await fetch(url, {
     ...restOptions,
     method,
-    headers: {
-      "Content-Type": "application/json",
-      ...headers,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: finalHeaders,
+    // FormData 不能手动设置 application/json，也不能 JSON.stringify。
+    // 浏览器会自动生成 multipart/form-data 的 boundary，手动写反而会导致后端读不到文件。
+    body:
+      body === undefined
+        ? undefined
+        : isFormData
+          ? body
+          : JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -41,6 +51,6 @@ export async function request<T>(
     throw new Error(await readErrorMessage(response));
   }
 
-  // 泛型 T 让调用方能得到明确的返回类型，例如 request<ChatResponse>()。
+  // 泛型 T 让调用方能得到明确的返回类型，例如 request<DocumentListResponse>()。
   return (await response.json()) as T;
 }
