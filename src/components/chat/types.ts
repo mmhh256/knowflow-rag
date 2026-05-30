@@ -4,3 +4,11 @@ export type {
   RetrievalStatus,
   SourceChunk,
 } from "@/lib/types/chat";
+
+export type StreamStatus =
+  | "idle"
+  | "loading"
+  | "streaming"
+  | "done"
+  | "error"
+  | "aborted";

@@ -1,17 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { ConversationList } from "@/components/chat/ConversationList";
 import { AppShell } from "@/components/layout/AppShell";
 import { request } from "@/lib/request";
 import type {
-  ChatMessage,
-  ChatRequest,
-  ChatResponse,
+  ChatStreamDone,
+  ChatStreamMeta,
+  ChatStreamRequest,
   Conversation,
 } from "@/lib/types/chat";
+import type { ChatMessage, StreamStatus } from "@/components/chat/types";
 
 type ConversationsResponse = {
   conversations: Conversation[];
@@ -19,6 +20,11 @@ type ConversationsResponse = {
 
 type MessagesResponse = {
   messages: ChatMessage[];
+};
+
+type SseEvent = {
+  event: string;
+  data: string;
 };
 
 // 统一生成中文时间，保证用户消息和助手消息的显示格式一致。
@@ -31,6 +37,38 @@ function createMessageId(role: ChatMessage["role"]) {
   return `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function parseSseEvent(raw: string): SseEvent | null {
+  const lines = raw.split("\n").filter(Boolean);
+  let event = "message";
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      event = line.replace("event:", "").trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.replace("data:", "").trim());
+    }
+  }
+
+  if (dataLines.length === 0) {
+    return null;
+  }
+
+  return {
+    event,
+    data: dataLines.join("\n"),
+  };
+}
+
+async function readStreamError(response: Response) {
+  try {
+    const data = (await response.json()) as { error?: string };
+    return data.error ?? `请求失败：${response.status}`;
+  } catch {
+    return `请求失败：${response.status}`;
+  }
+}
+
 export default function ChatPage() {
   // conversations 来自 GET /api/conversations，刷新页面后会重新从数据库加载。
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -40,12 +78,18 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // input 是受控输入框的值，ChatInput 只负责展示和触发变更。
   const [input, setInput] = useState("");
-  // isLoading 用来控制按钮禁用和“正在生成”占位，防止重复提交。
-  const [isLoading, setIsLoading] = useState(false);
+  // 流式输出能让用户边看边等，减少“空等一整段回答”的焦虑感。
+  // streamStatus 记录流式输出状态，控制按钮、提示文案和 UI 状态切换。
+  const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
+  const [streamError, setStreamError] = useState("");
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   // error 保存接口失败后的提示文案，交给 ChatWindow 展示。
   const [error, setError] = useState("");
+
+  // AbortController 用来中断 fetch 请求，停止流式生成。
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const streamingMessageIdRef = useRef<string | null>(null);
 
   const loadMessages = useCallback(async (conversationId: string) => {
     setIsLoadingMessages(true);
@@ -98,11 +142,15 @@ export default function ChatPage() {
 
   async function handleSelectConversation(conversationId: string) {
     setActiveConversationId(conversationId);
+    setStreamStatus("idle");
+    setStreamError("");
     await loadMessages(conversationId);
   }
 
   async function handleNewConversation() {
     setError("");
+    setStreamStatus("idle");
+    setStreamError("");
 
     try {
       const data = await request<{ conversation: Conversation }>(
@@ -127,7 +175,11 @@ export default function ChatPage() {
 
   async function handleSend() {
     const question = input.trim();
-    if (!question || isLoading) {
+    if (
+      !question ||
+      streamStatus === "loading" ||
+      streamStatus === "streaming"
+    ) {
       return;
     }
 
@@ -141,50 +193,155 @@ export default function ChatPage() {
 
     setMessages((currentMessages) => [...currentMessages, userMessage]);
     setInput("");
-    setIsLoading(true);
+    setStreamStatus("loading");
+    setStreamError("");
     setError("");
 
+    // AbortController 用来在前端主动中断请求，模拟“停止生成”。
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    streamingMessageIdRef.current = null;
+
     try {
-      // 前端只关心 ChatRequest/ChatResponse，底层 fetch 细节交给 request 封装。
-      const requestBody: ChatRequest = {
+      // SSE 流式接口不适合复用 request()，因为它会直接 res.json()。
+      const requestBody: ChatStreamRequest = {
         question,
         conversationId: activeConversationId,
       };
-      const data = await request<ChatResponse>("/api/chat", {
+      // fetch 能直接读取 ReadableStream；axios 默认会缓冲完整响应，不适合流式 token。
+      const response = await fetch("/api/chat/stream", {
         method: "POST",
-        body: requestBody,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
       });
-      // 后端 answer 回来后，再组装成 assistant 消息追加到消息列表。
-      const assistantMessage: ChatMessage = {
-        id: createMessageId("assistant"),
-        role: "assistant",
-        conversationId: data.conversationId,
-        content: data.answer,
-        createdAt: createTimestamp(),
-        sources: data.sources,
-        answerMode: data.answerMode,
-        retrievalStatus: data.retrievalStatus,
-        fallbackReason: data.fallbackReason,
-      };
 
-      setMessages((currentMessages) => [
-        ...currentMessages.map((message) =>
-          message.conversationId === "pending"
-            ? { ...message, conversationId: data.conversationId }
-            : message,
-        ),
-        assistantMessage,
-      ]);
-      setActiveConversationId(data.conversationId);
-      await loadConversations(false);
+      if (!response.ok) {
+        throw new Error(await readStreamError(response));
+      }
+
+      if (!response.body) {
+        throw new Error("浏览器未返回可读取的流式响应");
+      }
+
+      // response.body.getReader() 让我们逐块读取流式响应。
+      const reader = response.body.getReader();
+      // TextDecoder 负责把 Uint8Array 字节流转换成字符串。
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      // response.body.getReader() 让我们能逐段读取 SSE 数据。
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+
+        for (const rawEvent of events) {
+          const parsed = parseSseEvent(rawEvent);
+          if (!parsed) {
+            continue;
+          }
+
+          if (parsed.event === "meta") {
+            const meta = JSON.parse(parsed.data) as ChatStreamMeta;
+            const assistantId = createMessageId("assistant");
+            streamingMessageIdRef.current = assistantId;
+
+            setMessages((currentMessages) => [
+              ...currentMessages.map((message) =>
+                message.conversationId === "pending"
+                  ? { ...message, conversationId: meta.conversationId }
+                  : message,
+              ),
+              {
+                id: assistantId,
+                role: "assistant",
+                conversationId: meta.conversationId,
+                content: "",
+                createdAt: createTimestamp(),
+                sources: meta.sources,
+                answerMode: meta.answerMode,
+                retrievalStatus: meta.retrievalStatus,
+                fallbackReason: meta.fallbackReason,
+              },
+            ]);
+
+            setActiveConversationId(meta.conversationId);
+            // loading -> streaming：收到 meta 后开始真正展示流式输出。
+            setStreamStatus("streaming");
+          }
+
+          if (parsed.event === "token") {
+            const payload = JSON.parse(parsed.data) as { content?: string };
+            const token = payload.content ?? "";
+            if (!token) {
+              continue;
+            }
+
+            // token 会逐步追加到 assistant 消息的 content，形成实时输出效果。
+            setMessages((currentMessages) =>
+              currentMessages.map((message) =>
+                message.id === streamingMessageIdRef.current
+                  ? { ...message, content: `${message.content}${token}` }
+                  : message,
+              ),
+            );
+          }
+
+          if (parsed.event === "done") {
+            const payload = JSON.parse(parsed.data) as ChatStreamDone;
+
+            setMessages((currentMessages) =>
+              currentMessages.map((message) =>
+                message.id === streamingMessageIdRef.current
+                  ? {
+                      ...message,
+                      id: payload.messageId,
+                      content: payload.answer || message.content,
+                    }
+                  : message,
+              ),
+            );
+
+            // streaming -> done：后端已保存完整 assistant 消息。
+            setStreamStatus("done");
+            streamingMessageIdRef.current = null;
+            void loadConversations(false);
+          }
+
+          if (parsed.event === "error") {
+            const payload = JSON.parse(parsed.data) as { message?: string };
+            setStreamError(payload.message ?? "模型生成失败，请稍后再试。");
+            // streaming -> error：显示错误提示，允许用户继续提问。
+            setStreamStatus("error");
+          }
+        }
+      }
     } catch (requestError) {
-      // request.ts 会把非 2xx 响应转成 Error，这里只负责把错误展示出来。
+      if (requestError instanceof DOMException && requestError.name === "AbortError") {
+        // aborted：前端主动停止，保留已生成内容。
+        setStreamStatus("aborted");
+        return;
+      }
+
       const message =
         requestError instanceof Error ? requestError.message : "聊天请求失败";
-      setError(message);
+      setStreamError(message);
+      setStreamStatus("error");
     } finally {
-      setIsLoading(false);
+      abortControllerRef.current = null;
     }
+  }
+
+  function handleAbort() {
+    abortControllerRef.current?.abort();
+    setStreamStatus("aborted");
   }
 
   return (
@@ -202,14 +359,17 @@ export default function ChatPage() {
       <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
         <ChatWindow
           messages={messages}
-          isLoading={isLoading || isLoadingMessages}
+          isLoading={isLoadingMessages}
+          streamStatus={streamStatus}
+          streamError={streamError}
           error={error}
         />
         <ChatInput
           value={input}
-          isLoading={isLoading}
+          streamStatus={streamStatus}
           onChange={setInput}
           onSend={handleSend}
+          onAbort={handleAbort}
         />
       </div>
     </AppShell>

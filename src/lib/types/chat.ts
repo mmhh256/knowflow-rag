@@ -26,6 +26,13 @@ export type ChatRequest = {
   conversationId?: string;
 };
 
+export type ChatStreamRequest = {
+  // 前端发送给 /api/chat/stream 的用户问题。
+  question: string;
+  // 没有 conversationId 时，后端会自动创建一个新会话。
+  conversationId?: string;
+};
+
 export type ChatResponse = {
   conversationId: string;
   // 后端返回给前端展示的助手回复。
@@ -35,6 +42,19 @@ export type ChatResponse = {
   answerMode: AnswerMode;
   retrievalStatus: RetrievalStatus;
   fallbackReason?: string;
+};
+
+export type ChatStreamMeta = {
+  conversationId: string;
+  answerMode: AnswerMode;
+  retrievalStatus: RetrievalStatus;
+  fallbackReason?: string;
+  sources: SourceChunk[];
+};
+
+export type ChatStreamDone = {
+  messageId: string;
+  answer: string;
 };
 
 export type ChatErrorResponse = {

@@ -1,4 +1,5 @@
 import { SourcePanel } from "@/components/chat/SourcePanel";
+import { MarkdownRenderer } from "@/components/common/MarkdownRenderer";
 import type { ChatMessage, RetrievalStatus } from "@/components/chat/types";
 
 type MessageBubbleProps = {
@@ -45,7 +46,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           </div>
         ) : null}
 
-        <div className="whitespace-pre-wrap">{message.content}</div>
+        {isUser ? (
+          <div className="whitespace-pre-wrap">{message.content}</div>
+        ) : message.content ? (
+          <MarkdownRenderer content={message.content} />
+        ) : (
+          <div className="text-sm text-slate-400">正在生成...</div>
+        )}
 
         {!isUser && message.answerMode ? (
           <div className="mt-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-500">

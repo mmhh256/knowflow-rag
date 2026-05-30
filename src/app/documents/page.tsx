@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { MarkdownRenderer } from "@/components/common/MarkdownRenderer";
 import {
   documentStatusLabels,
   formatFileSize,
@@ -54,6 +55,16 @@ function getIndexButtonText(document: KnowledgeDocument, isIndexing: boolean) {
   }
 
   return document.status === "indexed" ? "重新索引" : "向量化";
+}
+
+function isMarkdownType(fileType?: string) {
+  const normalized = (fileType ?? "").toLowerCase();
+  return (
+    normalized === "md" ||
+    normalized === "markdown" ||
+    normalized === ".md" ||
+    normalized === ".markdown"
+  );
 }
 
 export default function DocumentsPage() {
@@ -483,11 +494,23 @@ export default function DocumentsPage() {
                 <h3 className="text-sm font-semibold text-slate-900">
                   文本预览
                 </h3>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-                  {selectedDocument.parsedTextPreview ||
-                    selectedDocument.preview ||
-                    "暂无可预览内容。"}
-                </p>
+                <div className="mt-3">
+                  {isMarkdownType(selectedDocument.fileType) ? (
+                    <MarkdownRenderer
+                      content={
+                        selectedDocument.parsedTextPreview ||
+                        selectedDocument.preview ||
+                        "暂无可预览内容。"
+                      }
+                    />
+                  ) : (
+                    <p className="whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                      {selectedDocument.parsedTextPreview ||
+                        selectedDocument.preview ||
+                        "暂无可预览内容。"}
+                    </p>
+                  )}
+                </div>
               </div>
             </section>
           ) : null}

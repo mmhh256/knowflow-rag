@@ -12,4 +12,8 @@ export type ChatProviderMessage = {
 // 这样后续换模型供应商时，主要改 Provider 实现，不需要重写聊天接口和前端页面。
 export interface ChatModelProvider {
   generate(messages: ChatProviderMessage[]): Promise<string>;
+
+  // stream 返回一个 AsyncIterable，表示模型会“逐段”输出回答内容。
+  // 调用方可以用 for await...of 按 token 逐步消费。
+  stream?(messages: ChatProviderMessage[]): AsyncIterable<string>;
 }
