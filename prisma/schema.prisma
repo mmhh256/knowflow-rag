@@ -1,0 +1,72 @@
+// Prisma schema 用来描述数据库表结构。
+// P4 只保存用户、会话、消息和文档元信息，不做文档上传、RAG 或登录。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+/// User 是用户表。P4 还没有登录，所以先使用固定的 mock 用户。
+/// 一个用户可以拥有多个会话和多个文档，这就是一对多关系。
+model User {
+  id            String         @id @default(cuid())
+  email         String?        @unique
+  name          String?
+  conversations Conversation[]
+  documents     Document[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+/// Conversation 是会话表。
+/// 一个用户可以有多个 Conversation；每个 Conversation 属于一个 User。
+model Conversation {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  user      User      @relation(fields: [userId], references: [id])
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, updatedAt])
+}
+
+/// Message 是消息表。
+/// 一个 Conversation 下会有多条 Message，通过 role 区分 user 和 assistant。
+/// sources、answerMode、retrievalStatus、fallbackReason 是给后续 RAG 和普通兜底回答预留的结构化字段。
+model Message {
+  id              String       @id @default(cuid())
+  conversationId  String
+  role            String
+  content         String       @db.Text
+  sources         Json?
+  answerMode      String?
+  retrievalStatus String?
+  fallbackReason  String?      @db.Text
+  conversation    Conversation @relation(fields: [conversationId], references: [id])
+  createdAt       DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+/// Document 是文档元信息表。
+/// P4 只先建表，为 P5 文档上传和解析保存文件信息做准备。
+model Document {
+  id         String   @id @default(cuid())
+  userId     String
+  fileName   String
+  fileType   String
+  fileSize   Int?
+  filePath   String
+  status     String   @default("uploaded")
+  chunkCount Int      @default(0)
+  user       User     @relation(fields: [userId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, createdAt])
+}

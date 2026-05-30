@@ -19,7 +19,7 @@ export function ChatWindow({ messages, isLoading, error }: ChatWindowProps) {
           {messages.length === 0 ? (
             <EmptyState
               title="开始一次知识库问答"
-              description="在底部输入问题。P3 会通过后端调用外部模型返回普通 AI 回复。"
+              description="在底部输入问题。P4 会自动创建会话，并把用户消息和 AI 回复保存到 MySQL。"
             />
           ) : (
             messages.map((message) => (

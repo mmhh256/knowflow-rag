@@ -10,14 +10,11 @@ const navItems = [
   { href: "/settings", label: "模型设置" },
 ];
 
-// P2 仍然使用静态会话，后续保存会话后再从后端读取。
-const conversations = [
-  { title: "产品问答", time: "刚刚" },
-  { title: "文档理解", time: "昨天" },
-  { title: "模型配置", time: "草稿" },
-];
+type AppSidebarProps = {
+  children?: React.ReactNode;
+};
 
-export function AppSidebar() {
+export function AppSidebar({ children }: AppSidebarProps) {
   // usePathname 用来判断当前路由，从而给菜单项添加选中样式。
   const pathname = usePathname();
 
@@ -50,27 +47,11 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <section className="mt-8 border-t border-slate-200 pt-5">
-        <div className="px-3 text-xs font-semibold text-slate-500">
-          会话列表
-        </div>
-        <div className="mt-3 space-y-2">
-          {conversations.map((conversation) => (
-            <button
-              key={conversation.title}
-              type="button"
-              className="w-full rounded-md px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
-            >
-              <span className="block truncate font-medium">
-                {conversation.title}
-              </span>
-              <span className="mt-1 block text-xs text-slate-400">
-                {conversation.time}
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
+      {children ? (
+        <section className="mt-8 min-h-0 border-t border-slate-200 pt-5">
+          {children}
+        </section>
+      ) : null}
     </aside>
   );
 }

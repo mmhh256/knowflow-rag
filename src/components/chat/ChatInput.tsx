@@ -48,7 +48,7 @@ export function ChatInput({
         </button>
       </div>
       <p className="mx-auto mt-2 max-w-5xl text-xs text-slate-500">
-        P3 会请求后端接口调用外部模型，API Key 只在服务端使用。
+        P4 会保存会话和消息，刷新页面后可以从左侧会话列表重新打开。
       </p>
     </div>
   );

@@ -7,6 +7,13 @@ type MessageBubbleProps = {
 export function MessageBubble({ message }: MessageBubbleProps) {
   // role 决定消息是用户气泡还是助手回复，也决定布局方向。
   const isUser = message.role === "user";
+  const createdAt = new Date(message.createdAt);
+  const displayTime = Number.isNaN(createdAt.getTime())
+    ? message.createdAt
+    : createdAt.toLocaleTimeString("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -27,6 +34,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         ) : null}
 
         <div className="whitespace-pre-wrap">{message.content}</div>
+
+        {!isUser && message.answerMode ? (
+          <div className="mt-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-500">
+            {message.answerMode === "fallback" ? "普通模型回答" : "知识库增强回答"}
+            {message.fallbackReason ? ` · ${message.fallbackReason}` : ""}
+          </div>
+        ) : null}
 
         {/* 引用来源跟随助手消息展示；P2 sources 为空，后续 RAG 阶段会填充。 */}
         {!isUser && message.sources?.length ? (
@@ -61,7 +75,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           }`}
       >
           {/* 时间和角色放在气泡底部，方便调试消息生成顺序。 */}
-          {isUser ? "用户" : "助手"} · {message.createdAt}
+          {isUser ? "用户" : "助手"} · {displayTime}
         </div>
       </article>
     </div>
