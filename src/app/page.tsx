@@ -4,7 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 // 首页只做项目入口和能力说明，不承载聊天状态。
 export default function Home() {
   return (
-    <AppShell>
+    <AppShell requireAuth={false}>
       <section className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-6xl flex-col justify-center px-4 py-12 sm:px-6">
         <div className="space-y-4">
           <p className="text-sm font-medium uppercase tracking-wide text-slate-500">

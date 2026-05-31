@@ -1,4 +1,7 @@
-import { ensureMockUser, MOCK_USER_ID } from "@/lib/auth/mock-user";
+import {
+  isUnauthorizedError,
+  requireCurrentUser,
+} from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import type { Conversation } from "@/lib/types/chat";
 
@@ -16,14 +19,22 @@ function toConversationDto(conversation: {
   };
 }
 
-// GET /api/conversations：读取 mock 用户的会话列表。
-// 查询时必须带 userId，避免以后接登录后出现“看到别人会话”的问题。
+function handleError(error: unknown, fallback: string) {
+  if (isUnauthorizedError(error)) {
+    return Response.json({ error: error.message }, { status: 401 });
+  }
+
+  const message = error instanceof Error ? error.message : fallback;
+  return Response.json({ error: message }, { status: 500 });
+}
+
 export async function GET() {
   try {
-    await ensureMockUser();
+    const user = await requireCurrentUser();
 
+    // 会话列表必须按当前登录用户过滤，避免 A 用户看到 B 用户的聊天记录。
     const conversations = await prisma.conversation.findMany({
-      where: { userId: MOCK_USER_ID },
+      where: { userId: user.id },
       orderBy: { updatedAt: "desc" },
     });
 
@@ -31,30 +42,25 @@ export async function GET() {
       conversations: conversations.map(toConversationDto),
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "读取会话列表失败";
-    return Response.json({ error: message }, { status: 500 });
+    return handleError(error, "读取会话列表失败");
   }
 }
 
-// POST /api/conversations：创建一个新会话。
-// P4 不做登录，所以先统一绑定 mock-user-001。
 export async function POST(req: Request) {
   try {
-    await ensureMockUser();
+    const user = await requireCurrentUser();
     const body = (await req.json().catch(() => ({}))) as { title?: string };
     const title = body.title?.trim() || "新会话";
 
     const conversation = await prisma.conversation.create({
       data: {
         title,
-        userId: MOCK_USER_ID,
+        userId: user.id,
       },
     });
 
     return Response.json({ conversation: toConversationDto(conversation) });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "创建会话失败";
-    return Response.json({ error: message }, { status: 500 });
+    return handleError(error, "创建会话失败");
   }
 }

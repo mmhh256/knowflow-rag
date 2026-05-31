@@ -12,7 +12,9 @@ export async function ensureMockUser() {
     update: {},
     create: {
       id: MOCK_USER_ID,
+      email: "mock-user@example.local",
       name: "本地演示用户",
+      passwordHash: "",
     },
   });
 }

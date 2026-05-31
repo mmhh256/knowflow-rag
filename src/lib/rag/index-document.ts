@@ -1,30 +1,30 @@
 import { randomUUID } from "crypto";
 
-import { ensureMockUser, MOCK_USER_ID } from "@/lib/auth/mock-user";
 import { appConfig } from "@/lib/config";
+import { prisma } from "@/lib/db";
 import { createEmbeddingProvider } from "@/lib/llm/openai-compatible-embedding";
 import { chunkText } from "@/lib/rag/chunk-text";
-import { prisma } from "@/lib/db";
+import type { DocumentVectorRecord } from "@/lib/types/vector";
 import {
   addDocumentChunks,
   deleteDocumentVectors,
 } from "@/lib/vector/document-vector-store";
-import type { DocumentVectorRecord } from "@/lib/types/vector";
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "文档索引失败";
 }
 
-export async function indexDocument(documentId: string): Promise<{
+export async function indexDocument(params: {
+  documentId: string;
+  userId: string;
+}): Promise<{
   documentId: string;
   chunkCount: number;
 }> {
-  await ensureMockUser();
-
   const document = await prisma.document.findFirst({
     where: {
-      id: documentId,
-      userId: MOCK_USER_ID,
+      id: params.documentId,
+      userId: params.userId,
     },
   });
 
@@ -45,7 +45,6 @@ export async function indexDocument(documentId: string): Promise<{
   }
 
   try {
-    // 状态改成 indexing 后，前端可以显示“向量化中”，用户知道后端正在处理。
     await prisma.document.update({
       where: { id: document.id },
       data: {
@@ -84,6 +83,7 @@ export async function indexDocument(documentId: string): Promise<{
       createdAt: now,
     }));
 
+    // 重新索引前先删除旧向量，避免一个文档重复堆积多个版本的 chunk。
     await deleteDocumentVectors(document.id);
     await addDocumentChunks(records);
 

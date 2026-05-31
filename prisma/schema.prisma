@@ -1,5 +1,5 @@
-// Prisma schema 用来描述数据库表结构。
-// P4 只保存用户、会话、消息和文档元信息，不做文档上传、RAG 或登录。
+// Prisma schema 用来描述 MySQL 里的表结构。
+// P11 开始接入真实登录用户，User / Conversation / Message / Document 都要围绕 userId 做数据隔离。
 
 generator client {
   provider = "prisma-client-js"
@@ -9,12 +9,14 @@ datasource db {
   provider = "mysql"
 }
 
-/// User 是用户表。P4 还没有登录，所以先使用固定的 mock 用户。
-/// 一个用户可以拥有多个会话和多个文档，这就是一对多关系。
+/// User 是用户表。
+/// email 用作登录账号；passwordHash 保存 bcrypt 加密后的密码，绝不能保存明文密码。
+/// 一个用户可以有多个会话和多个文档，这是一对多关系。
 model User {
   id            String         @id @default(cuid())
-  email         String?        @unique
+  email         String         @unique
   name          String?
+  passwordHash  String         @default("")
   conversations Conversation[]
   documents     Document[]
   createdAt     DateTime       @default(now())
@@ -22,7 +24,7 @@ model User {
 }
 
 /// Conversation 是会话表。
-/// 一个用户可以有多个 Conversation；每个 Conversation 属于一个 User。
+/// 每个会话都通过 userId 绑定到某个用户，查询会话列表时必须带 userId，避免不同用户互相看到数据。
 model Conversation {
   id        String    @id @default(cuid())
   userId    String
@@ -36,8 +38,8 @@ model Conversation {
 }
 
 /// Message 是消息表。
-/// 一个 Conversation 下会有多条 Message，通过 role 区分 user 和 assistant。
-/// sources、answerMode、retrievalStatus、fallbackReason 是给后续 RAG 和普通兜底回答预留的结构化字段。
+/// Message 通过 conversationId 归属于某个会话，而会话再归属于用户。
+/// sources / answerMode / retrievalStatus / fallbackReason 用来保存 RAG 回答的结构化信息，刷新页面后仍能展示引用来源。
 model Message {
   id              String       @id @default(cuid())
   conversationId  String
@@ -53,9 +55,9 @@ model Message {
   @@index([conversationId, createdAt])
 }
 
-/// Document 是文档元信息表。
-/// P5 会把上传文件保存到本地 uploads 目录，同时把解析出的纯文本保存到 parsedText。
-/// 后续 P6 会读取 parsedText 做文本分块和 embedding，本阶段只解析文本，不做向量化。
+/// Document 是知识库文档表。
+/// 文档也必须绑定 userId，P11 后每个用户只能上传、查看、索引、删除自己的文档。
+/// parsedText 给 P6 分块和向量化使用；indexError 用来记录向量化失败原因。
 model Document {
   id         String   @id @default(cuid())
   userId     String

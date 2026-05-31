@@ -1,4 +1,7 @@
-import { ensureMockUser, MOCK_USER_ID } from "@/lib/auth/mock-user";
+import {
+  isUnauthorizedError,
+  requireCurrentUser,
+} from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import type {
   AnswerMode,
@@ -33,25 +36,24 @@ function toMessageDto(message: {
   };
 }
 
-// GET /api/conversations/[id]/messages：读取某个会话的历史消息。
-// 这里先确认会话属于 mock 用户，再查消息，避免越权读取其他用户数据。
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await ensureMockUser();
+    const user = await requireCurrentUser();
     const { id } = await params;
 
+    // 先确认会话属于当前用户，再查询消息。不要只靠 conversationId 查询，否则可能越权读取。
     const conversation = await prisma.conversation.findFirst({
       where: {
         id,
-        userId: MOCK_USER_ID,
+        userId: user.id,
       },
     });
 
     if (!conversation) {
-      return Response.json({ error: "会话不存在" }, { status: 404 });
+      return Response.json({ error: "会话不存在。" }, { status: 404 });
     }
 
     const messages = await prisma.message.findMany({
@@ -63,6 +65,10 @@ export async function GET(
       messages: messages.map(toMessageDto),
     });
   } catch (error) {
+    if (isUnauthorizedError(error)) {
+      return Response.json({ error: error.message }, { status: 401 });
+    }
+
     const message = error instanceof Error ? error.message : "读取历史消息失败";
     return Response.json({ error: message }, { status: 500 });
   }

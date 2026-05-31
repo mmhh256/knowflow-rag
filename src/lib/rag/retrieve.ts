@@ -1,4 +1,3 @@
-import { MOCK_USER_ID, ensureMockUser } from "@/lib/auth/mock-user";
 import { appConfig } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { createEmbeddingProvider } from "@/lib/llm/openai-compatible-embedding";
@@ -13,17 +12,16 @@ type RetrieveResult = {
 
 export async function retrieveRelevantChunks(params: {
   question: string;
+  userId: string;
   topK?: number;
   scoreThreshold?: number;
   documentIds?: string[];
 }): Promise<RetrieveResult> {
   try {
-    await ensureMockUser();
-
-    // no_documents：当前用户没有 indexed 文档，说明知识库还没准备好，直接 fallback，不浪费 Embedding API。
+    // 只查询当前用户 indexed 状态的文档。未索引、解析失败或其他用户的文档都不能参与问答。
     const indexedDocuments = await prisma.document.findMany({
       where: {
-        userId: MOCK_USER_ID,
+        userId: params.userId,
         status: "indexed",
         ...(params.documentIds?.length
           ? { id: { in: params.documentIds } }
@@ -48,7 +46,6 @@ export async function retrieveRelevantChunks(params: {
       documentIds: indexedDocuments.map((document) => document.id),
     });
 
-    // no_chunks：有 indexed 文档，但 LanceDB 没查到 chunk，常见原因是向量库数据被清空或索引失败后状态没同步。
     if (sources.length === 0) {
       return {
         status: "no_chunks",
@@ -60,7 +57,6 @@ export async function retrieveRelevantChunks(params: {
     const threshold = params.scoreThreshold ?? appConfig.rag.scoreThreshold;
     const bestScore = Math.max(...sources.map((source) => source.score));
 
-    // low_score：检索到了内容，但相关性不够。强行使用低相关资料会让 RAG 变成“带资料的胡编”。
     if (bestScore < threshold) {
       return {
         status: "low_score",
@@ -77,7 +73,6 @@ export async function retrieveRelevantChunks(params: {
     const message =
       error instanceof Error ? error.message : "知识库检索过程出现异常。";
 
-    // error：检索或 embedding 失败。这里不让聊天整体失败，而是交给 answer-question 走普通 LLM 兜底。
     return {
       status: "error",
       sources: [],

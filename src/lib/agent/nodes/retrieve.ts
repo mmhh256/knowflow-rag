@@ -8,6 +8,7 @@ export async function retrieveNode(
   // retrieveRelevantChunks 内部会只使用 indexed 文档，避免把未向量化文档误用于问答。
   const retrieval = await retrieveRelevantChunks({
     question: state.rewrittenQuestion || state.question,
+    userId: state.userId,
   });
 
   // 检索失败不直接让接口失败，而是把状态交给后续 Judge/Fallback。

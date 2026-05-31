@@ -217,12 +217,31 @@ export default function ChatPage() {
         conversationId: activeConversationId,
       };
       // fetch 能直接读取 ReadableStream；axios 默认会缓冲完整响应，不适合流式 token。
-      const response = await fetch("/api/chat/stream", {
+      let response = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
+
+      if (response.status === 401) {
+        const refreshResponse = await fetch("/api/auth/refresh", {
+          method: "POST",
+          credentials: "include",
+          signal: controller.signal,
+        });
+
+        if (refreshResponse.ok) {
+          response = await fetch("/api/chat/stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          });
+        }
+      }
 
       if (!response.ok) {
         throw new Error(await readStreamError(response));

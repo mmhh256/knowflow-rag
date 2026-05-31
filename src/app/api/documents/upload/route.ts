@@ -1,10 +1,13 @@
 import {
+  isUnauthorizedError,
+  requireCurrentUser,
+} from "@/lib/auth/current-user";
+import {
   MAX_UPLOAD_SIZE,
   toKnowledgeDocument,
 } from "@/lib/documents/document-types";
 import { parseDocument } from "@/lib/documents/parse-document";
 import { saveUploadFile } from "@/lib/documents/save-upload-file";
-import { ensureMockUser, MOCK_USER_ID } from "@/lib/auth/mock-user";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -15,8 +18,10 @@ function getErrorMessage(error: unknown) {
 
 export async function POST(req: Request) {
   try {
+    const user = await requireCurrentUser();
+
     // FormData 是浏览器上传文件时常用的数据格式，里面可以同时放文件和普通字段。
-    // 文件上传必须在后端处理，因为 API Route 才能把文件写入服务器目录并保存数据库记录。
+    // 文件上传必须在后端处理，因为 Route Handler 才能把文件写入服务器目录并保存数据库记录。
     const formData = await req.formData();
     const file = formData.get("file");
 
@@ -31,12 +36,11 @@ export async function POST(req: Request) {
       );
     }
 
-    await ensureMockUser();
     const savedFile = await saveUploadFile(file);
 
     let document = await prisma.document.create({
       data: {
-        userId: MOCK_USER_ID,
+        userId: user.id,
         fileName: savedFile.fileName,
         fileType: savedFile.fileType,
         fileSize: savedFile.fileSize,
@@ -45,7 +49,6 @@ export async function POST(req: Request) {
       },
     });
 
-    // 状态流转能让前端知道文档当前处理到哪一步：已上传 -> 解析中 -> 已解析 / 解析失败。
     document = await prisma.document.update({
       where: { id: document.id },
       data: { status: "parsing" },
@@ -60,7 +63,6 @@ export async function POST(req: Request) {
           status: "parsed",
           parsedText,
           parseError: null,
-          // P5 只做解析，不做分块，所以 chunkCount 仍然保持 0。
           chunkCount: 0,
         },
       });
@@ -76,6 +78,10 @@ export async function POST(req: Request) {
 
     return Response.json({ document: toKnowledgeDocument(document) });
   } catch (error) {
+    if (isUnauthorizedError(error)) {
+      return Response.json({ error: error.message }, { status: 401 });
+    }
+
     return Response.json({ error: getErrorMessage(error) }, { status: 500 });
   }
 }

@@ -33,6 +33,8 @@ type AppConfig = {
     configEncryptionSecret?: string;
     jwtAccessSecret?: string;
     jwtRefreshSecret?: string;
+    accessTokenExpiresIn: string;
+    refreshTokenExpiresIn: string;
   };
 };
 
@@ -49,6 +51,13 @@ export type ServerEmbeddingConfig = {
   embeddingBaseUrl: string;
   embeddingModel: string;
   lancedbPath: string;
+};
+
+export type ServerAuthConfig = {
+  jwtAccessSecret: string;
+  jwtRefreshSecret: string;
+  accessTokenExpiresIn: string;
+  refreshTokenExpiresIn: string;
 };
 
 const supportedLlmProviders = ["openai-compatible", "deepseek"];
@@ -69,8 +78,8 @@ function numberEnv(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-// 所有环境变量集中从 appConfig 读取，避免在组件或接口里到处写 process.env。
-// API Key 只能在后端使用，不能返回给浏览器，否则用户可以在源码或 Network 中看到密钥。
+// 所有环境变量集中从 appConfig 读取，避免在接口里到处散落 process.env。
+// LLM / Embedding / JWT secret 都只能在服务端使用，不能返回给浏览器。
 export const appConfig: AppConfig = {
   llm: {
     provider: optionalEnv("LLM_PROVIDER") ?? "openai-compatible",
@@ -91,7 +100,7 @@ export const appConfig: AppConfig = {
     chunkOverlap: numberEnv("RAG_CHUNK_OVERLAP", 100),
   },
   conversation: {
-    // 多轮对话只读取最近几条消息。历史太多会让 prompt 变长、成本变高，也更容易把旧话题带进当前问题。
+    // 多轮对话只读取最近 N 条消息，避免 prompt 过长、成本过高，也减少旧话题干扰当前问题。
     historyLimit: numberEnv("CONVERSATION_HISTORY_LIMIT", 8),
   },
   database: {
@@ -107,6 +116,8 @@ export const appConfig: AppConfig = {
     configEncryptionSecret: optionalEnv("CONFIG_ENCRYPTION_SECRET"),
     jwtAccessSecret: optionalEnv("JWT_ACCESS_SECRET"),
     jwtRefreshSecret: optionalEnv("JWT_REFRESH_SECRET"),
+    accessTokenExpiresIn: optionalEnv("ACCESS_TOKEN_EXPIRES_IN") ?? "15m",
+    refreshTokenExpiresIn: optionalEnv("REFRESH_TOKEN_EXPIRES_IN") ?? "7d",
   },
 };
 
@@ -128,17 +139,9 @@ export const serverEmbeddingConfig: ServerEmbeddingConfig = {
 export function getValidatedServerLlmConfig(): ServerLlmConfig {
   const missingFields: string[] = [];
 
-  if (!serverConfig.llmApiKey) {
-    missingFields.push("LLM_API_KEY");
-  }
-
-  if (!serverConfig.llmBaseUrl) {
-    missingFields.push("LLM_BASE_URL");
-  }
-
-  if (!serverConfig.llmModel) {
-    missingFields.push("LLM_MODEL");
-  }
+  if (!serverConfig.llmApiKey) missingFields.push("LLM_API_KEY");
+  if (!serverConfig.llmBaseUrl) missingFields.push("LLM_BASE_URL");
+  if (!serverConfig.llmModel) missingFields.push("LLM_MODEL");
 
   if (missingFields.length > 0) {
     throw new Error(
@@ -159,11 +162,9 @@ export function getValidatedServerEmbeddingConfig(): ServerEmbeddingConfig {
   if (!serverEmbeddingConfig.embeddingApiKey) {
     missingFields.push("EMBEDDING_API_KEY");
   }
-
   if (!serverEmbeddingConfig.embeddingBaseUrl) {
     missingFields.push("EMBEDDING_BASE_URL");
   }
-
   if (!serverEmbeddingConfig.embeddingModel) {
     missingFields.push("EMBEDDING_MODEL");
   }
@@ -185,4 +186,26 @@ export function getValidatedServerEmbeddingConfig(): ServerEmbeddingConfig {
   }
 
   return serverEmbeddingConfig;
+}
+
+export function getValidatedAuthConfig(): ServerAuthConfig {
+  const jwtAccessSecret = appConfig.security.jwtAccessSecret ?? "";
+  const jwtRefreshSecret = appConfig.security.jwtRefreshSecret ?? "";
+  const missingFields: string[] = [];
+
+  if (!jwtAccessSecret) missingFields.push("JWT_ACCESS_SECRET");
+  if (!jwtRefreshSecret) missingFields.push("JWT_REFRESH_SECRET");
+
+  if (missingFields.length > 0) {
+    throw new Error(
+      `登录鉴权配置缺失：${missingFields.join("、")}。请在 .env.local 中配置长随机字符串后重启项目。`,
+    );
+  }
+
+  return {
+    jwtAccessSecret,
+    jwtRefreshSecret,
+    accessTokenExpiresIn: appConfig.security.accessTokenExpiresIn,
+    refreshTokenExpiresIn: appConfig.security.refreshTokenExpiresIn,
+  };
 }

@@ -3,7 +3,7 @@ export type SourceChunk = {
   documentId: string;
   fileName: string;
   fileType?: string;
-  // score 表示检索命中分数。P7 中由 LanceDB 的 distance 转换而来，越接近 1 越相关。
+  // score 表示检索命中分数，越接近 1 越相关。
   score: number;
   content: string;
   page?: number;
@@ -21,7 +21,7 @@ export type RetrievalStatus =
 
 export type ChatRequest = {
   question: string;
-  // 没有 conversationId 时，后端会自动创建一个新会话。
+  // 没有 conversationId 时，后端会自动创建新会话。
   conversationId?: string;
 };
 

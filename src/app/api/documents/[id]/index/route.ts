@@ -1,4 +1,7 @@
-import { MOCK_USER_ID, ensureMockUser } from "@/lib/auth/mock-user";
+import {
+  isUnauthorizedError,
+  requireCurrentUser,
+} from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { indexDocument } from "@/lib/rag/index-document";
 
@@ -12,14 +15,13 @@ export async function POST(_req: Request, context: RouteContext) {
   const { id } = await context.params;
 
   try {
-    // 索引接口单独拆出来，是为了让上传解析和向量化分开调试。
-    // P6 只负责“文档 -> chunk -> embedding -> LanceDB”，不负责问答。
-    await ensureMockUser();
+    const user = await requireCurrentUser();
 
+    // 只允许索引当前用户自己的文档。索引结果会写入 LanceDB，必须和数据库权限保持一致。
     const document = await prisma.document.findFirst({
       where: {
         id,
-        userId: MOCK_USER_ID,
+        userId: user.id,
       },
     });
 
@@ -27,7 +29,7 @@ export async function POST(_req: Request, context: RouteContext) {
       return Response.json({ error: "文档不存在。" }, { status: 404 });
     }
 
-    const result = await indexDocument(id);
+    const result = await indexDocument({ documentId: id, userId: user.id });
 
     return Response.json({
       document: {
@@ -38,6 +40,10 @@ export async function POST(_req: Request, context: RouteContext) {
       },
     });
   } catch (error) {
+    if (isUnauthorizedError(error)) {
+      return Response.json({ error: error.message }, { status: 401 });
+    }
+
     const message = error instanceof Error ? error.message : "文档向量化失败";
     return Response.json({ error: message }, { status: 500 });
   }

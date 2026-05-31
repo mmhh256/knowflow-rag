@@ -1,4 +1,7 @@
-import { ensureMockUser, MOCK_USER_ID } from "@/lib/auth/mock-user";
+import {
+  isUnauthorizedError,
+  requireCurrentUser,
+} from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db";
 import { createOpenAICompatibleChatProvider } from "@/lib/llm/openai-compatible";
 import { prepareRagPriorityAnswer } from "@/lib/rag/prepare-answer";
@@ -15,31 +18,29 @@ function createConversationTitle(question: string) {
   return question.length > 20 ? `${question.slice(0, 20)}...` : question;
 }
 
-async function getOrCreateConversation(
-  conversationId: string | undefined,
-  question: string,
-) {
-  await ensureMockUser();
-
-  if (!conversationId) {
+async function getOrCreateConversation(params: {
+  conversationId?: string;
+  question: string;
+  userId: string;
+}) {
+  if (!params.conversationId) {
     return prisma.conversation.create({
       data: {
-        userId: MOCK_USER_ID,
-        title: createConversationTitle(question),
+        userId: params.userId,
+        title: createConversationTitle(params.question),
       },
     });
   }
 
   return prisma.conversation.findFirst({
     where: {
-      id: conversationId,
-      userId: MOCK_USER_ID,
+      id: params.conversationId,
+      userId: params.userId,
     },
   });
 }
 
 function encodeSseEvent(event: string, data: unknown) {
-  // SSE 事件格式固定为 event + data + 空行，前端会按空行切分每条事件。
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
   try {
     body = (await req.json()) as Partial<ChatStreamRequest>;
   } catch {
-    return jsonError("请求体解析失败", 400);
+    return jsonError("请求体解析失败。", 400);
   }
 
   const question = typeof body.question === "string" ? body.question.trim() : "";
@@ -57,13 +58,30 @@ export async function POST(req: Request) {
     typeof body.conversationId === "string" ? body.conversationId : undefined;
 
   if (!question) {
-    return jsonError("问题不能为空", 400);
+    return jsonError("问题不能为空。", 400);
   }
 
-  const conversation = await getOrCreateConversation(conversationId, question);
+  let user: Awaited<ReturnType<typeof requireCurrentUser>>;
+  let conversation: Awaited<ReturnType<typeof getOrCreateConversation>>;
+
+  try {
+    user = await requireCurrentUser();
+    conversation = await getOrCreateConversation({
+      conversationId,
+      question,
+      userId: user.id,
+    });
+  } catch (error) {
+    if (isUnauthorizedError(error)) {
+      return jsonError(error.message, 401);
+    }
+
+    const message = error instanceof Error ? error.message : "会话初始化失败";
+    return jsonError(message, 500);
+  }
 
   if (!conversation) {
-    return jsonError("会话不存在", 404);
+    return jsonError("会话不存在。", 404);
   }
 
   let clientAborted = false;
@@ -76,13 +94,12 @@ export async function POST(req: Request) {
       };
 
       try {
-        // P10 第一版不要求 LangGraph 每个节点都流式输出。
-        // 这里先让 Agentic RAG 图完成问题改写、检索、Judge 和 messages 准备，
-        // 然后继续复用 P8 的 Provider.stream 输出最终答案，保留停止生成能力。
+        // Agentic RAG 先完成问题改写、检索、Judge 和 messages 准备；
+        // 最终答案仍用 Provider.stream 输出，保留 P8 的 SSE 和停止生成能力。
         const prepared = await prepareRagPriorityAnswer({
           question,
           conversationId: conversation.id,
-          userId: MOCK_USER_ID,
+          userId: user.id,
         });
 
         await prisma.message.create({
@@ -106,7 +123,7 @@ export async function POST(req: Request) {
         const chatProvider = createOpenAICompatibleChatProvider();
 
         if (!chatProvider.stream) {
-          throw new Error("当前模型 Provider 不支持流式输出");
+          throw new Error("当前模型 Provider 不支持流式输出。");
         }
 
         let answer = "";
@@ -121,8 +138,6 @@ export async function POST(req: Request) {
         }
 
         if (clientAborted) {
-          // 停止生成时不保存半截 assistant 消息。
-          // 前端会保留已显示内容；刷新后以数据库中完整保存的历史为准。
           return;
         }
 
@@ -160,7 +175,6 @@ export async function POST(req: Request) {
       }
     },
     cancel() {
-      // 前端 AbortController.abort() 会触发 cancel，用于停止继续读取模型流。
       clientAborted = true;
     },
   });
