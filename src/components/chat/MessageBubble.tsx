@@ -23,6 +23,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         hour: "2-digit",
         minute: "2-digit",
       });
+  const hasAgentDebugInfo =
+    !isUser && (message.rewrittenQuestion || message.judgeReason);
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -39,9 +41,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               AI
             </span>
             <span>
-              {message.answerMode === "rag"
-                ? "知识库增强回答"
-                : "普通模型回答"}
+              {message.answerMode === "rag" ? "知识库增强回答" : "普通模型回答"}
             </span>
           </div>
         ) : null}
@@ -57,9 +57,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {!isUser && message.answerMode ? (
           <div className="mt-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-500">
             <div className="font-medium text-slate-600">
-              {message.answerMode === "rag"
-                ? "知识库增强回答"
-                : "普通模型回答"}
+              {message.answerMode === "rag" ? "知识库增强回答" : "普通模型回答"}
             </div>
             {message.retrievalStatus ? (
               <div className="mt-1">
@@ -70,6 +68,30 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               <div className="mt-1">{message.fallbackReason}</div>
             ) : null}
           </div>
+        ) : null}
+
+        {hasAgentDebugInfo ? (
+          <details className="mt-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+            <summary className="cursor-pointer font-medium text-slate-600">
+              Agent 调试信息
+            </summary>
+            {message.rewrittenQuestion ? (
+              <div className="mt-2">
+                <div className="font-medium text-slate-600">检索问题</div>
+                <div className="mt-1 whitespace-pre-wrap">
+                  {message.rewrittenQuestion}
+                </div>
+              </div>
+            ) : null}
+            {message.judgeReason ? (
+              <div className="mt-2">
+                <div className="font-medium text-slate-600">资料判断</div>
+                <div className="mt-1 whitespace-pre-wrap">
+                  {message.judgeReason}
+                </div>
+              </div>
+            ) : null}
+          </details>
         ) : null}
 
         {!isUser && message.sources?.length ? (

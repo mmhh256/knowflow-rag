@@ -39,7 +39,7 @@ async function getOrCreateConversation(
 }
 
 function encodeSseEvent(event: string, data: unknown) {
-  // SSE 事件格式固定为 event + data + 空行，浏览器前端会按空行切分每条事件。
+  // SSE 事件格式固定为 event + data + 空行，前端会按空行切分每条事件。
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
@@ -76,8 +76,9 @@ export async function POST(req: Request) {
       };
 
       try {
-        // 流式接口和普通接口复用同一套 prepare 逻辑。
-        // prepare 会在当前 user 消息保存前读取历史，避免当前问题重复进入 prompt。
+        // P10 第一版不要求 LangGraph 每个节点都流式输出。
+        // 这里先让 Agentic RAG 图完成问题改写、检索、Judge 和 messages 准备，
+        // 然后继续复用 P8 的 Provider.stream 输出最终答案，保留停止生成能力。
         const prepared = await prepareRagPriorityAnswer({
           question,
           conversationId: conversation.id,
@@ -98,6 +99,8 @@ export async function POST(req: Request) {
           retrievalStatus: prepared.retrievalStatus,
           fallbackReason: prepared.fallbackReason,
           sources: prepared.sources,
+          rewrittenQuestion: prepared.rewrittenQuestion,
+          judgeReason: prepared.judgeReason,
         });
 
         const chatProvider = createOpenAICompatibleChatProvider();
@@ -118,8 +121,8 @@ export async function POST(req: Request) {
         }
 
         if (clientAborted) {
-          // P8/P9 第一版停止生成时不保存半截 assistant 消息。
-          // 前端会保留已显示内容；刷新后以数据库中已完整保存的历史为准。
+          // 停止生成时不保存半截 assistant 消息。
+          // 前端会保留已显示内容；刷新后以数据库中完整保存的历史为准。
           return;
         }
 

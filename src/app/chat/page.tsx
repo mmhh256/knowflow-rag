@@ -276,6 +276,8 @@ export default function ChatPage() {
                 answerMode: meta.answerMode,
                 retrievalStatus: meta.retrievalStatus,
                 fallbackReason: meta.fallbackReason,
+                rewrittenQuestion: meta.rewrittenQuestion,
+                judgeReason: meta.judgeReason,
               },
             ]);
 

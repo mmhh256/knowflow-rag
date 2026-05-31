@@ -1,5 +1,6 @@
-import { createOpenAICompatibleChatProvider } from "@/lib/llm/openai-compatible";
-import { prepareRagPriorityAnswer } from "@/lib/rag/prepare-answer";
+import { runAgenticRag } from "@/lib/agent/graph";
+import { appConfig } from "@/lib/config";
+import { getRecentConversationMessages } from "@/lib/chat/history";
 import type { AnswerMode, RetrievalStatus, SourceChunk } from "@/lib/types/chat";
 
 export async function answerQuestionWithRagPriority(params: {
@@ -12,21 +13,21 @@ export async function answerQuestionWithRagPriority(params: {
   retrievalStatus: RetrievalStatus;
   fallbackReason?: string;
   sources: SourceChunk[];
+  rewrittenQuestion?: string;
+  judgeReason?: string;
 }> {
-  // 这个函数保留给普通一次性回答场景使用。P9 的历史上下文已经在 prepareRagPriorityAnswer 中统一拼好。
-  const prepared = await prepareRagPriorityAnswer({
+  const historyMessages = params.conversationId
+    ? await getRecentConversationMessages({
+        conversationId: params.conversationId,
+        userId: params.userId,
+        limit: appConfig.conversation.historyLimit,
+      })
+    : [];
+
+  return runAgenticRag({
     question: params.question,
     conversationId: params.conversationId,
     userId: params.userId,
+    historyMessages,
   });
-  const chatProvider = createOpenAICompatibleChatProvider();
-  const answer = await chatProvider.generate(prepared.messages);
-
-  return {
-    answer,
-    answerMode: prepared.answerMode,
-    retrievalStatus: prepared.retrievalStatus,
-    fallbackReason: prepared.fallbackReason,
-    sources: prepared.sources,
-  };
 }

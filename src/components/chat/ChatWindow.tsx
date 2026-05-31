@@ -1,16 +1,27 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+
 import { EmptyState } from "@/components/common/EmptyState";
 import { Loading } from "@/components/common/Loading";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import type { ChatMessage, StreamStatus } from "@/components/chat/types";
 
 type ChatWindowProps = {
-  // 父页面负责管理消息状态，这个组件只负责把消息渲染出来。
+  // 父页面负责管理消息状态，这个组件只负责渲染消息和控制聊天窗口滚动。
   messages: ChatMessage[];
   isLoading: boolean;
   streamStatus: StreamStatus;
   streamError?: string;
   error?: string;
 };
+
+function isNearBottom(element: HTMLDivElement) {
+  const distanceToBottom =
+    element.scrollHeight - element.scrollTop - element.clientHeight;
+
+  return distanceToBottom < 80;
+}
 
 export function ChatWindow({
   messages,
@@ -19,6 +30,9 @@ export function ChatWindow({
   streamError,
   error,
 }: ChatWindowProps) {
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoFollowRef = useRef(true);
+  const previousMessageCountRef = useRef(0);
   const isStreaming = streamStatus === "loading" || streamStatus === "streaming";
   const loadingLabel = isStreaming
     ? streamStatus === "loading"
@@ -26,24 +40,66 @@ export function ChatWindow({
       : "模型正在生成"
     : "正在加载消息";
 
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const previousMessageCount = previousMessageCountRef.current;
+    const messageCountChanged = messages.length !== previousMessageCount;
+    const latestMessage = messages[messages.length - 1];
+
+    previousMessageCountRef.current = messages.length;
+
+    // 用户发送新问题、切换会话加载历史、或消息数量变化时，默认重新把视角拉到底部。
+    // 这样新一轮回答开始时用户能直接看到最新问题和 AI 回复。
+    if (messageCountChanged) {
+      shouldAutoFollowRef.current = true;
+    }
+
+    // 如果用户在 AI 回答过程中手动滚动离开底部，shouldAutoFollowRef 会变成 false。
+    // 后续 token 更新仍会重新渲染消息，但不会强行把用户拽回底部。
+    if (shouldAutoFollowRef.current || latestMessage?.role === "user") {
+      requestAnimationFrame(() => {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: isStreaming ? "smooth" : "auto",
+        });
+      });
+    }
+  }, [messages, isLoading, isStreaming, error, streamError]);
+
+  function handleScroll() {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    // 用户滚动到上方阅读历史时，暂停自动跟随。
+    // 如果用户自己滚回底部，则恢复自动跟随，继续看实时输出。
+    shouldAutoFollowRef.current = isNearBottom(container);
+  }
+
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-6"
+      >
         <div className="mx-auto max-w-5xl space-y-6">
-          {/* 有消息时渲染消息列表，没有消息时展示空状态。 */}
           {messages.length === 0 ? (
             <EmptyState
               title="开始一次知识库问答"
-              description="在底部输入问题。P4 会自动创建会话，并把用户消息和 AI 回复保存到 MySQL。"
+              description="在底部输入问题，系统会保存会话消息，并优先尝试使用知识库回答。"
             />
           ) : (
             messages.map((message) => (
-              // key 使用稳定 id，帮助 React 正确追踪每一条消息。
               <MessageBubble key={message.id} message={message} />
             ))
           )}
 
-          {/* 请求期间显示 loading，请求失败时显示错误提示。 */}
           {isLoading || isStreaming ? <Loading label={loadingLabel} /> : null}
           {error ? (
             <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
