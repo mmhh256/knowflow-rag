@@ -180,6 +180,71 @@ export default function ChatPage() {
     }
   }
 
+  async function handleRenameConversation(
+    conversationId: string,
+    title: string,
+  ) {
+    setError("");
+
+    try {
+      const data = await request<{ conversation: Conversation }>(
+        `/api/conversations/${conversationId}`,
+        {
+          method: "PATCH",
+          body: { title },
+        },
+      );
+
+      setConversations((currentConversations) =>
+        currentConversations.map((conversation) =>
+          conversation.id === conversationId ? data.conversation : conversation,
+        ),
+      );
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error ? requestError.message : "重命名会话失败";
+      setError(message);
+      throw requestError;
+    }
+  }
+
+  async function handleDeleteConversation(conversationId: string) {
+    // 删除会话时也要停止当前流式输出，避免后端已经删除会话后前端还继续写 token。
+    abortControllerRef.current?.abort();
+    setError("");
+    setStreamError("");
+
+    try {
+      await request<{ success: boolean }>(`/api/conversations/${conversationId}`, {
+        method: "DELETE",
+      });
+
+      const remainingConversations = conversations.filter(
+        (conversation) => conversation.id !== conversationId,
+      );
+      setConversations(remainingConversations);
+
+      if (activeConversationId === conversationId) {
+        const nextConversation = remainingConversations[0];
+        setStreamStatus("idle");
+        streamingMessageIdRef.current = null;
+
+        if (nextConversation) {
+          setActiveConversationId(nextConversation.id);
+          await loadMessages(nextConversation.id);
+        } else {
+          setActiveConversationId(undefined);
+          setMessages([]);
+        }
+      }
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error ? requestError.message : "删除会话失败";
+      setError(message);
+      throw requestError;
+    }
+  }
+
   async function handleSend() {
     const question = input.trim();
     if (
@@ -381,6 +446,8 @@ export default function ChatPage() {
           isLoading={isLoadingConversations}
           onNewConversation={handleNewConversation}
           onSelectConversation={handleSelectConversation}
+          onRenameConversation={handleRenameConversation}
+          onDeleteConversation={handleDeleteConversation}
         />
       }
     >

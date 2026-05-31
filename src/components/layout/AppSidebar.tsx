@@ -5,10 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth-store";
 
 const navItems = [
-  { href: "/", label: "首页" },
   { href: "/chat", label: "智能问答" },
   { href: "/documents", label: "知识库" },
-  { href: "/settings", label: "模型设置" },
 ];
 
 type AppSidebarProps = {
@@ -27,7 +25,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
   return (
     <aside className="hidden h-full w-64 shrink-0 overflow-y-auto border-r border-slate-200 bg-white px-4 py-5 lg:flex lg:flex-col">
-      <Link href="/" className="block rounded-lg px-3 py-2">
+      <Link href="/chat" className="block rounded-lg px-3 py-2">
         <div className="text-sm font-semibold text-slate-950">知流知识库</div>
         <div className="mt-1 text-xs text-slate-500">智能知识库问答</div>
       </Link>
@@ -35,7 +33,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
       <nav className="mt-8 space-y-1">
         {navItems.map((item) => {
           const isActive =
-            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
 
           return (
             <Link

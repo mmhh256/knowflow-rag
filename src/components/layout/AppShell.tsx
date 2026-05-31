@@ -8,7 +8,7 @@ type AppShellProps = {
 };
 
 // AppShell 统一设置左侧导航和右侧页面内容。
-// P11 以后核心业务页面需要登录保护，首页可以通过 requireAuth={false} 继续公开展示。
+// P11 以后核心业务页面需要登录保护；根路径会直接跳转到 /chat。
 export function AppShell({
   children,
   sidebarContent,
